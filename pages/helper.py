@@ -8,7 +8,7 @@ import xlrd
 import openpyxl
 import os
 import pandas as pd
-
+from datetime import datetime
 
 def output_save_in_template(data, headers, filename="Report.xlsx"):
     """
@@ -145,3 +145,15 @@ def read_file(
         df = df.reset_index(drop=True)
 
     return df
+
+def parse_expiry_date(expiry_str):
+    expiry_str = str(expiry_str).strip()
+    if not expiry_str:
+        return ""
+
+    try:
+        dt = datetime.strptime(expiry_str.strip(), "%m-%d-%Y")
+        return dt.strftime("%Y%m%d")
+    except ValueError:
+        # Invalid date → return empty or raw (your choice)
+        return ""

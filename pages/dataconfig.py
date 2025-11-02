@@ -158,36 +158,322 @@ class DataConfigPage(tk.Frame):
             # List of all expected datasets
             expected_datasets = ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
                                 "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                                "aafspl_car_future", "option_security", "car_trade_loader", "asio_sub_fund_2_trade", "geneva_custodian_mapping"]
+                                "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "geneva_custodian_mapping"]
             
             if os.path.exists(consolidated_path):
-                with open(consolidated_path, "r") as f:
-                    consolidated_data = json.load(f)
-                    # Load lotsize data
-                    lotsize_data = consolidated_data.get("lotsize_data", {})
-                    if lotsize_data:
-                        self.lotsize_data.update(lotsize_data)
-                    
-                    # Check for missing datasets and add defaults
-                    needs_save = False
-                    for dataset_name in expected_datasets:
-                        if dataset_name in consolidated_data:
-                            self.datasets[dataset_name] = consolidated_data[dataset_name]
-                        else:
-                            # Dataset is missing, add default
-                            default_data = self._load_default_dataset_data(dataset_name)
-                            self.datasets[dataset_name] = default_data
-                            consolidated_data[dataset_name] = default_data
-                            needs_save = True
-                    
-                    # If we added missing datasets, save the file
-                    if needs_save:
-                        with open(consolidated_path, "w") as fw:
-                            json.dump(consolidated_data, fw, indent=4)
+                # Load file; if unreadable/empty, recreate with defaults
+                consolidated_data = {}
+                try:
+                    with open(consolidated_path, "r") as f:
+                        consolidated_data = json.load(f)
+                except Exception:
+                    consolidated_data = {}
+                if not isinstance(consolidated_data, dict) or not consolidated_data:
+                    default_consolidated_data = {
+                        "lotsize_data": self.default_lotsize_data.copy(),
+                        "fund_filename_map": {"DBSBK0000033": {"Fund Names": {"Default": "DIF-Class 1 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000036": {"Fund Names": {"Default": "DIF-Class 2 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000038": {"Fund Names": {"Default": "DIF-Class 3 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000042": {"Fund Names": {"Default": "DIF-Class 5 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000044": {"Fund Names": {"Default": "DIF-Class 6 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000043": {"Fund Names": {"Default": "DIF-Class 7 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000049": {"Fund Names": {"Default": "DIF-Class 8 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000050": {"Fund Names": {"Default": "DIF-Class 9 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000051": {"Fund Names": {"Default": "DIF-Class 10 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000052": {"Fund Names": {"Default": "DIF-Class 11 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000074": {"Fund Names": {"Default": "DIF-Class 12 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000179": {"Fund Names": {"Default": "DIF-Class 13 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000189": {"Fund Names": {"Default": "DIF-Class 14 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000192": {"Fund Names": {"Default": "DIF-Class 15 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000214": {"Fund Names": {"Default": "DIF-Class 16 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000216": {"Fund Names": {"Default": "DIF-Class 17 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000217": {"Fund Names": {"Default": "DIF-Class 18_Moon"}, "Password": "AAGCD0792B"}, "DBSBK0000232": {"Fund Names": {"Default": "DIF-Class 19 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000247": {"Fund Names": {"CDS": "DIF-Class 21 CDS Holding", "Default": "DIF-Class 21 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000178": {"Fund Names": {"Default": "DGF-Cell 8"}, "Password": "AAICD1968M"}, "BNPP00000458": {"Fund Names": {"Default": "DGF-Cell 9"}, "Password": "AAICD2891H"}, "DGF-Cell 10": {"Fund Names": {"Default": "DGF-Cell 10"}, "Password": "AAICD3412C"}, "BNPP00000480": {"Fund Names": {"Default": "DGF-Cell 11"}, "Password": "AAICD6359G"}, "BNPP00000488": {"Fund Names": {"Default": "DGF-Cell 13"}, "Password": "AAICD7821M"}, "BNPP00000540": {"Fund Names": {"Default": "DGF-Cell 16"}, "Password": "AAJCD5624K"}, "BNPP00000535": {"Fund Names": {"Default": "DGF-Cell 17"}, "Password": "AAJCD4991K"}, "DBSBK0000229": {"Fund Names": {"Default": "DGF-Cell 18"}, "Password": "AAJCD6205G"}, "DBSBK0000228": {"Fund Names": {"Default": "DGF-Cell 19"}, "Password": "AAJCD6049E"}, "DBSBK0000285": {"Fund Names": {"CDS": "DGF-Cell 23 CDS Holding", "Default": "DGF-Cell 23 Holding"}, "Password": "AAKCD6244Q"}, "DBSBK0000299": {"Fund Names": {"Default": "DGF-Cell 24 Holding"}, "Password": "AAKCD7324B"}, "DBSBK0000353": {"Fund Names": {"Default": "DGF-Cell 28 Holding"}, "Password": "AALCD1140J"}, "DBSBK0000354": {"Fund Names": {"Default": "DGF-Cell 29 Holding"}, "Password": "AALCD1141K"}, "DBSBK0000380": {"Fund Names": {"Default": "DGF-Cell 32 Holding"}, "Password": ""}, "DBSBK0000356": {"Fund Names": {"Default": "GlobalQ_AIF-III"}, "Password": ""}, "DGF-Cell 36": {"Fund Names": {"Default": "DGF-Cell 36"}, "Password": ""}, "DGF-Cell 38": {"Fund Names": {"Default": "DGF-Cell 38"}, "Password": ""}},
+                        "asio_sf_2_trade_loader": {
+                            "RecordAction": "InsertUpdate",
+                            "KeyValue.KeyName": "",
+                            "UserTranId1": "",
+                            "Portfolio": "ASIO - SF 2_INR",
+                            "LocationAccount": "Asio_Sub Fund_2_OHM_FO_KOTBK0001479",
+                            "Broker": "",
+                            "PriceDenomination": "CALC",
+                            "CounterInvestment": "INR",
+                            "NetInvestmentAmount": "CALC",
+                            "NetCounterAmount": "CALC",
+                            "tradeFX": "",
+                            "ContractFxRateNumerator": "",
+                            "ContractFxRateDenominator": "",
+                            "ContractFxRate": "",
+                            "NotionalAmount": "",
+                            "FundStructure2": "CALC",
+                            "SpotDate": "",
+                            "PriceDirectly": "",
+                            "CounterFXDenomination": "CALC",
+                            "CounterTDateFx": "",
+                            "AccruedInterest": "",
+                            "InvestmentAccruedInterest": "",
+                            "TradeExpenses.ExpenseNumber": "",
+                            "TradeExpenses.ExpenseCode": "",
+                            "TradeExpenses.ExpenseAmt": "",
+                            "NonCapExpenses.NonCapNumber": "",
+                            "NonCapExpenses.NonCapExpenseCode": "",
+                            "NonCapExpenses.NonCapAmount": "",
+                            "NonCapExpenses.NonCapCurrency": "",
+                            "NonCapExpenses.LocationAccount": "",
+                            "NonCapExpenses.NonCapLiabilityCode": "",
+                            "NonCapExpenses.NonCapPaymentType": ""
+                        },
+                        "aafspl_car_future": {
+                            "Exchange": "MCX",
+                            "Issuer": "",
+                            "Ticker": "",
+                            "Cusip": "",
+                            "Sedol": "",
+                            "Isin": "",
+                            "AltKey1": "",
+                            "AltKey2": "",
+                            "BloombergID": "",
+                            "BloombergTicker": "",
+                            "BloombergUniqueID": "",
+                            "BloombergMarketSector": "",
+                            "SettleDays": "",
+                            "PricingFactor": "",
+                            "CurrentPriceDayRange": 1,
+                            "AssetType": "FT",
+                            "InvestmentType": "CMFT",
+                            "PriceDenomination": "INR",
+                            "BifurcationCurrency": "INR",
+                            "PrincipalCurrency": "INR",
+                            "IncomeCurrency": "INR",
+                            "RiskCurrency": "INR",
+                            "IssueCountry": "IN",
+                            "WithholdingTaxType": "Standard",
+                            "QDIEligibilityFlag": "Not Eligible",
+                            "SharesOutstanding": "",
+                            "SubIndustry": "",
+                            "SubIndustry2": "",
+                            "QuantityPrecision": 3,
+                            "InvestmentCrossZero": "Use Accounting Parameters",
+                            "PriceByPreference": "Currency",
+                            "ForwardPriceInterpolateFlag": 0,
+                            "PricingPrecision": 3,
+                            "FirstMarkDate": "01-01-2022",
+                            "LastMarkDate": "",
+                            "PriceList": "",
+                            "AutoGenerateMarks": 1,
+                            "CashSettlement": 1
+                        },
+                        "option_security": {
+                            "Exchange": "MCX",
+                            "Issuer": "",
+                            "Ticker": "",
+                            "Cusip": "",
+                            "Sedol": "",
+                            "Isin": "",
+                            "Riccode": "",
+                            "AltKey1": "",
+                            "AltKey2": "",
+                            "BloombergID": "",
+                            "BloombergTicker": "",
+                            "BloombergUniqueID": "",
+                            "BloombergMarketSector": "",
+                            "SettleDays": 0,
+                            "PricingFactor": 1,
+                            "CurrentPriceDayRange": 0,
+                            "AssetType": "OP",
+                            "InvestmentType": "CMFTOP",
+                            "PriceDenomination": "",
+                            "BifurcationCurrency": "INR",
+                            "PrincipalCurrency": "INR",
+                            "IncomeCurrency": "INR",
+                            "RiskCurrency": "INR",
+                            "IssueCountry": "IN",
+                            "WithholdingTaxType": "Standard",
+                            "QDIEligibilityFlag": "Not Eligible",
+                            "SharesOutstanding": "",
+                            "Beta": "",
+                            "SubIndustry": "",
+                            "SubIndustry2": "",
+                            "NonDeliverableCurrencyFlag": "",
+                            "QuantityPrecision": "",
+                            "InvestmentCrossZero": "",
+                            "PriceByPreference": "",
+                            "ForwardPriceInterpolateFlag": "",
+                            "SecFeeSchedule": "",
+                            "SecEligibleFlag": "",
+                            "WashSalesEligible": "",
+                            "ExerciseStyle": "European",
+                            "PricingPrecision": 15,
+                            "CashSettledFlag": 1
+                        },
+                        "asio_sf_2_option_security": {
+                            "Exchange": "NSE",
+                            "Issuer": "",
+                            "Ticker": "",
+                            "Cusip": "",
+                            "Sedol": "",
+                            "Isin": "",
+                            "Riccode": "",
+                            "AltKey1": "",
+                            "AltKey2": "",
+                            "BloombergID": "",
+                            "BloombergTicker": "",
+                            "BloombergUniqueID": "",
+                            "BloombergMarketSector": "",
+                            "SettleDays": "",
+                            "PricingFactor": "",
+                            "TradingFactor": 1,
+                            "CurrentPriceDayRange": 1,
+                            "AssetType": "FT",
+                            "InvestmentType": "EQFT",
+                            "PriceDenomination": "INR",
+                            "BifurcationCurrency": "INR",
+                            "PrincipalCurrency": "INR",
+                            "IncomeCurrency": "INR",
+                            "RiskCurrency": "INR",
+                            "IssueCountry": "IN",
+                            "WithholdingTaxType": "Standard",
+                            "QDIEligibilityFlag": "Not Eligible",
+                            "SharesOutstanding": "",
+                            "SubIndustry": "",
+                            "SubIndustry2": "",
+                            "QuantityPrecision": 3,
+                            "InvestmentCrossZero": "Use Accounting Parameters",
+                            "PriceByPreference": "Currency",
+                            "ForwardPriceInterpolateFlag": 0,
+                            "PricingPrecision": 3,
+                            "FirstMarkDate": "01-01-2022",
+                            "LastMarkDate": "",
+                            "PriceList": "",
+                            "AutoGenerateMarks": 1,
+                            "CashSettlement": 1
+                        },
+                        "car_trade_loader": {
+                            "RecordAction": "InsertUpdate",
+                            "KeyValue.KeyName": "",
+                            "UserTranId1": "",
+                            "Portfolio": "AAFSPL_CAR",
+                            "LocationAccount": "AAFSPL_CAR_Ventura Securities Ltd",
+                            "Strategy": "Default",
+                            "Broker": "",
+                            "PriceDenomination": "CALC",
+                            "CounterInvestment": "INR",
+                            "NetInvestmentAmount": "CALC",
+                            "NetCounterAmount": "CALC",
+                            "TradeFX": "",
+                            "ContractFxRateNumerator": "",
+                            "ContractFxRateDenominator": "",
+                            "ContractFxRate": "",
+                            "NotionalAmount": "",
+                            "FundStructure": "CALC",
+                            "SpotDate": "",
+                            "PriceDirectly": "",
+                            "CounterFXDenomination": "CALC",
+                            "CounterTDateFx": "",
+                            "AccruedInterest": "",
+                            "InvestmentAccruedInterest": "",
+                            "TradeExpenses.ExpenseNumber": "",
+                            "TradeExpenses.ExpenseCode": "",
+                            "TradeExpenses.ExpenseAmt": "",
+                            "NonCapExpenses.NonCapNumber": "",
+                            "NonCapExpenses.NonCapExpenseCode": "",
+                            "NonCapExpenses.NonCapAmount": "",
+                            "NonCapExpenses.NonCapCurrency": "",
+                            "NonCapExpenses.LocationAccount": "",
+                            "NonCapExpenses.NonCapLiabilityCode": "",
+                            "NonCapExpenses.NonCapPaymentType": ""
+                        }
+                    }
+                    with open(consolidated_path, "w") as fw:
+                        json.dump(default_consolidated_data, fw, indent=4)
+                    consolidated_data = default_consolidated_data
+                # Load lotsize data
+                lotsize_data = consolidated_data.get("lotsize_data", {})
+                if lotsize_data:
+                    self.lotsize_data.update(lotsize_data)
+                
+                # Check for missing datasets and add defaults
+                needs_save = False
+                for dataset_name in expected_datasets:
+                    if dataset_name in consolidated_data:
+                        self.datasets[dataset_name] = consolidated_data[dataset_name]
+                    else:
+                        # Dataset is missing, add default
+                        default_data = self._load_default_dataset_data(dataset_name)
+                        self.datasets[dataset_name] = default_data
+                        consolidated_data[dataset_name] = default_data
+                        needs_save = True
+                
+                # If we added missing datasets, save the file
+                if needs_save:
+                    with open(consolidated_path, "w") as fw:
+                        json.dump(consolidated_data, fw, indent=4)
             else:
                 # Create default consolidated data if file doesn't exist
                 default_consolidated_data = {
                     "lotsize_data": self.default_lotsize_data.copy(),
+                    "fund_filename_map": {"DBSBK0000033": {"Fund Names": {"Default": "DIF-Class 1 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000036": {"Fund Names": {"Default": "DIF-Class 2 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000038": {"Fund Names": {"Default": "DIF-Class 3 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000042": {"Fund Names": {"Default": "DIF-Class 5 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000044": {"Fund Names": {"Default": "DIF-Class 6 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000043": {"Fund Names": {"Default": "DIF-Class 7 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000049": {"Fund Names": {"Default": "DIF-Class 8 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000050": {"Fund Names": {"Default": "DIF-Class 9 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000051": {"Fund Names": {"Default": "DIF-Class 10 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000052": {"Fund Names": {"Default": "DIF-Class 11 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000074": {"Fund Names": {"Default": "DIF-Class 12 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000179": {"Fund Names": {"Default": "DIF-Class 13 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000189": {"Fund Names": {"Default": "DIF-Class 14 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000192": {"Fund Names": {"Default": "DIF-Class 15 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000214": {"Fund Names": {"Default": "DIF-Class 16 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000216": {"Fund Names": {"Default": "DIF-Class 17 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000217": {"Fund Names": {"Default": "DIF-Class 18_Moon"}, "Password": "AAGCD0792B"}, "DBSBK0000232": {"Fund Names": {"Default": "DIF-Class 19 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000247": {"Fund Names": {"CDS": "DIF-Class 21 CDS Holding", "Default": "DIF-Class 21 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000178": {"Fund Names": {"Default": "DGF-Cell 8"}, "Password": "AAICD1968M"}, "BNPP00000458": {"Fund Names": {"Default": "DGF-Cell 9"}, "Password": "AAICD2891H"}, "DGF-Cell 10": {"Fund Names": {"Default": "DGF-Cell 10"}, "Password": "AAICD3412C"}, "BNPP00000480": {"Fund Names": {"Default": "DGF-Cell 11"}, "Password": "AAICD6359G"}, "BNPP00000488": {"Fund Names": {"Default": "DGF-Cell 13"}, "Password": "AAICD7821M"}, "BNPP00000540": {"Fund Names": {"Default": "DGF-Cell 16"}, "Password": "AAJCD5624K"}, "BNPP00000535": {"Fund Names": {"Default": "DGF-Cell 17"}, "Password": "AAJCD4991K"}, "DBSBK0000229": {"Fund Names": {"Default": "DGF-Cell 18"}, "Password": "AAJCD6205G"}, "DBSBK0000228": {"Fund Names": {"Default": "DGF-Cell 19"}, "Password": "AAJCD6049E"}, "DBSBK0000285": {"Fund Names": {"CDS": "DGF-Cell 23 CDS Holding", "Default": "DGF-Cell 23 Holding"}, "Password": "AAKCD6244Q"}, "DBSBK0000299": {"Fund Names": {"Default": "DGF-Cell 24 Holding"}, "Password": "AAKCD7324B"}, "DBSBK0000353": {"Fund Names": {"Default": "DGF-Cell 28 Holding"}, "Password": "AALCD1140J"}, "DBSBK0000354": {"Fund Names": {"Default": "DGF-Cell 29 Holding"}, "Password": "AALCD1141K"}, "DBSBK0000380": {"Fund Names": {"Default": "DGF-Cell 32 Holding"}, "Password": ""}, "DBSBK0000356": {"Fund Names": {"Default": "GlobalQ_AIF-III"}, "Password": ""}, "DGF-Cell 36": {"Fund Names": {"Default": "DGF-Cell 36"}, "Password": ""}, "DGF-Cell 38": {"Fund Names": {"Default": "DGF-Cell 38"}, "Password": ""}},
+                    "asio_sf_2_trade_loader": {
+                        "RecordAction": "InsertUpdate",
+                        "KeyValue.KeyName": "",
+                        "UserTranId1": "",
+                        "Portfolio": "ASIO - SF 2_INR",
+                        "LocationAccount": "Asio_Sub Fund_2_OHM_FO_KOTBK0001479",
+                        "Broker": "",
+                        "PriceDenomination": "CALC",
+                        "CounterInvestment": "INR",
+                        "NetInvestmentAmount": "CALC",
+                        "NetCounterAmount": "CALC",
+                        "tradeFX": "",
+                        "ContractFxRateNumerator": "",
+                        "ContractFxRateDenominator": "",
+                        "ContractFxRate": "",
+                        "NotionalAmount": "",
+                        "FundStructure2": "CALC",
+                        "SpotDate": "",
+                        "PriceDirectly": "",
+                        "CounterFXDenomination": "CALC",
+                        "CounterTDateFx": "",
+                        "AccruedInterest": "",
+                        "InvestmentAccruedInterest": "",
+                        "TradeExpenses.ExpenseNumber": "",
+                        "TradeExpenses.ExpenseCode": "",
+                        "TradeExpenses.ExpenseAmt": "",
+                        "NonCapExpenses.NonCapNumber": "",
+                        "NonCapExpenses.NonCapExpenseCode": "",
+                        "NonCapExpenses.NonCapAmount": "",
+                        "NonCapExpenses.NonCapCurrency": "",
+                        "NonCapExpenses.LocationAccount": "",
+                            "NonCapExpenses.NonCapLiabilityCode": "",
+                            "NonCapExpenses.NonCapPaymentType": ""
+                        },
+                        "asio_sf_2_option_security": {
+                            "Exchange": "NSE",
+                            "Issuer": "",
+                            "Ticker": "",
+                            "Cusip": "",
+                            "Sedol": "",
+                            "Isin": "",
+                            "Riccode": "",
+                            "AltKey1": "",
+                            "AltKey2": "",
+                            "BloombergID": "",
+                            "BloombergTicker": "",
+                            "BloombergUniqueID": "",
+                            "BloombergMarketSector": "",
+                            "SettleDays": 0,
+                            "PricingFactor": 1,
+                            "TradingFactor": 1,
+                            "CurrentPriceDayRange": 1,
+                            "AssetType": "OP",
+                            "InvestmentType": "IXOP",
+                            "PriceDenomination": "",
+                            "BifurcationCurrency": "INR",
+                            "PrincipalCurrency": "INR",
+                            "IncomeCurrency": "INR",
+                            "RiskCurrency": "INR",
+                            "IssueCountry": "IN",
+                            "WithholdingTaxType": "Standard",
+                            "QDIEligibilityFlag": "Not Eligible",
+                            "SharesOutstanding": "",
+                            "Beta": "",
+                            "SubIndustry": "",
+                            "SubIndustry2": "",
+                            "NonDeliverableCurrencyFlag": "",
+                            "QuantityPrecision": "",
+                            "InvestmentCrossZero": "",
+                            "PriceByPreference": "",
+                            "ForwardPriceInterpolateFlag": "",
+                            "SecFeeSchedule": "",
+                            "SecEligibleFlag": "",
+                            "WashSalesEligible": "",
+                            "ExerciseStyle": "European",
+                            "PricingPrecision": 15,
+                            "CashSettledFlag": 1
+                        },
                     "asio_portfolio_mapping": {
                         "ASIO - SF 3": "THE ASIO FUND VCC - SUB-FUND 3",
                         "ASIO - SF 8_Golden": "THE ASIO FUND VCC - EMKAY BHARAT FUND - BHARATS GOLDEN DECADE",
@@ -382,6 +668,88 @@ class DataConfigPage(tk.Frame):
                         "PricingPrecision": 15,
                         "CashSettledFlag": 1
                     },
+                    "asio_sf_2_option_security": {
+                        "Exchange": "NSE",
+                        "Issuer": "",
+                        "Ticker": "",
+                        "Cusip": "",
+                        "Sedol": "",
+                        "Isin": "",
+                        "AltKey1": "",
+                        "AltKey2": "",
+                        "BloombergID": "",
+                        "BloombergTicker": "",
+                        "BloombergUniqueID": "",
+                        "BloombergMarketSector": "",
+                        "SettleDays": "",
+                        "PricingFactor": "",
+                        "TradingFactor": 1,
+                        "CurrentPriceDayRange": 1,
+                        "AssetType": "FT",
+                        "InvestmentType": "EQFT",
+                        "PriceDenomination": "INR",
+                        "BifurcationCurrency": "INR",
+                        "PrincipalCurrency": "INR",
+                        "IncomeCurrency": "INR",
+                        "RiskCurrency": "INR",
+                        "IssueCountry": "IN",
+                        "WithholdingTaxType": "Standard",
+                        "QDIEligibilityFlag": "Not Eligible",
+                        "SharesOutstanding": "",
+                        "SubIndustry": "",
+                        "SubIndustry2": "",
+                        "QuantityPrecision": 3,
+                        "InvestmentCrossZero": "Use Accounting Parameters",
+                        "PriceByPreference": "Currency",
+                        "ForwardPriceInterpolateFlag": 0,
+                        "PricingPrecision": 3,
+                        "FirstMarkDate": "01-01-2022",
+                        "LastMarkDate": "",
+                        "PriceList": "",
+                        "AutoGenerateMarks": 1,
+                        "CashSettlement": 1
+                    },
+                    "asio_sf_2_future_security": {
+                        "Exchange": "NSE",
+                        "Issuer": "",
+                        "Ticker": "",
+                        "Cusip": "",
+                        "Sedol": "",
+                        "Isin": "",
+                        "AltKey1": "",
+                        "AltKey2": "",
+                        "BloombergID": "",
+                        "BloombergTicker": "",
+                        "BloombergUniqueID": "",
+                        "BloombergMarketSector": "",
+                        "SettleDays": "",
+                        "PricingFactor": "",
+                        "TradingFactor": 1,
+                        "CurrentPriceDayRange": 1,
+                        "AssetType": "FT",
+                        "InvestmentType": "EQFT",
+                        "PriceDenomination": "INR",
+                        "BifurcationCurrency": "INR",
+                        "PrincipalCurrency": "INR",
+                        "IncomeCurrency": "INR",
+                        "RiskCurrency": "INR",
+                        "IssueCountry": "IN",
+                        "WithholdingTaxType": "Standard",
+                        "QDIEligibilityFlag": "Not Eligible",
+                        "SharesOutstanding": "",
+                        "SubIndustry": "",
+                        "SubIndustry2": "",
+                        "QuantityPrecision": 3,
+                        "InvestmentCrossZero": "Use Accounting Parameters",
+                        "PriceByPreference": "Currency",
+                        "ForwardPriceInterpolateFlag": 0,
+                        "PricingPrecision": 3,
+                        "FirstMarkDate": "01-01-2022",
+                        "LastMarkDate": "",
+                        "PriceList": "",
+                        "AutoGenerateMarks": 1,
+                        "CashSettlement": 1
+                    },
                     "car_trade_loader": {
                         "RecordAction": "InsertUpdate",
                         "KeyValue.KeyName": "",
@@ -417,41 +785,7 @@ class DataConfigPage(tk.Frame):
                         "NonCapExpenses.NonCapLiabilityCode": "",
                         "NonCapExpenses.NonCapPaymentType": ""
                     },
-                    "asio_sub_fund_2_trade": {
-                        "RecordAction": "InsertUpdate",
-                        "KeyValue.KeyName": "",
-                        "UserTranId1": "",
-                        "Portfolio": "ASIO - SF 2_INR",
-                        "LocationAccount": "Asio_Sub Fund_2_OHM_FO_KOTBK0001479",
-                        "Broker": "",
-                        "PriceDenomination": "CALC",
-                        "CounterInvestment": "INR",
-                        "NetInvestmentAmount": "CALC",
-                        "NetCounterAmount": "CALC",
-                        "tradeFX": "",
-                        "ContractFxRateNumerator": "",
-                        "ContractFxRateDenominator": "",
-                        "ContractFxRate": "",
-                        "NotionalAmount": "",
-                        "FundStructure2": "CALC",
-                        "SpotDate": "",
-                        "PriceDirectly": "",
-                        "CounterFXDenomination": "CALC",
-                        "CounterTDateFx": "",
-                        "AccruedInterest": "",
-                        "InvestmentAccruedInterest": "",
-                        "TradeExpenses.ExpenseNumber": "",
-                        "TradeExpenses.ExpenseCode": "",
-                        "TradeExpenses.ExpenseAmt": "",
-                        "NonCapExpenses.NonCapNumber": "",
-                        "NonCapExpenses.NonCapExpenseCode": "",
-                        "NonCapExpenses.NonCapAmount": "",
-                        "NonCapExpenses.NonCapCurrency": "",
-                        "NonCapExpenses.LocationAccount": "",
-                        "NonCapExpenses.NonCapLiabilityCode": "",
-                        "NonCapExpenses.NonCapPaymentType": ""
-                    },
-                    "asio_sub_fund_2_option_security": {
+                    "asio_sf_2_option_security": {
                         "Exchange": "NSE",
                         "Issuer": "",
                         "Ticker": "",
@@ -467,6 +801,7 @@ class DataConfigPage(tk.Frame):
                         "BloombergMarketSector": "",
                         "SettleDays": 0,
                         "PricingFactor": 1,
+                        "TradingFactor": 1,
                         "CurrentPriceDayRange": 1,
                         "AssetType": "OP",
                         "InvestmentType": "IXOP",
@@ -534,7 +869,7 @@ class DataConfigPage(tk.Frame):
                 self.lotsize_data.update(default_consolidated_data["lotsize_data"])
                 for dataset_name in ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
                                     "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sub_fund_2_trade", "geneva_custodian_mapping"]:
+                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "geneva_custodian_mapping"]:
                     if dataset_name in default_consolidated_data:
                         self.datasets[dataset_name] = default_consolidated_data[dataset_name]
             # Keep alias in sync for current dataset
@@ -956,17 +1291,12 @@ class DataConfigPage(tk.Frame):
         return self._load_default_dataset_data(default_name)
 
     def _load_default_dataset_data(self, dataset_name):
-        try:
-            file_name = self.dataset_files.get(dataset_name, None)
-            if file_name and os.path.exists(file_name):
-                with open(file_name, "r") as f:
-                    return json.load(f)
-        except Exception as e:
-            print(f"Could not read {dataset_name}: {e}")
-        
-        # Default fund filename map (empty by default, will be populated from file_utils)
+        # IMPORTANT: This function should ONLY return defaults, never read from consolidated_data.json.
+        # Reading the whole file here causes wrong data structures to be injected when a dataset is missing.
+
+        # Default fund filename map (pre-populated mapping)
         if dataset_name == "fund_filename_map":
-            return {}
+            return {"DBSBK0000033": {"Fund Names": {"Default": "DIF-Class 1 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000036": {"Fund Names": {"Default": "DIF-Class 2 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000038": {"Fund Names": {"Default": "DIF-Class 3 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000042": {"Fund Names": {"Default": "DIF-Class 5 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000044": {"Fund Names": {"Default": "DIF-Class 6 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000043": {"Fund Names": {"Default": "DIF-Class 7 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000049": {"Fund Names": {"Default": "DIF-Class 8 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000050": {"Fund Names": {"Default": "DIF-Class 9 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000051": {"Fund Names": {"Default": "DIF-Class 10 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000052": {"Fund Names": {"Default": "DIF-Class 11 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000074": {"Fund Names": {"Default": "DIF-Class 12 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000179": {"Fund Names": {"Default": "DIF-Class 13 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000189": {"Fund Names": {"Default": "DIF-Class 14 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000192": {"Fund Names": {"Default": "DIF-Class 15 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000214": {"Fund Names": {"Default": "DIF-Class 16 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000216": {"Fund Names": {"Default": "DIF-Class 17 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000217": {"Fund Names": {"Default": "DIF-Class 18_Moon"}, "Password": "AAGCD0792B"}, "DBSBK0000232": {"Fund Names": {"Default": "DIF-Class 19 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000247": {"Fund Names": {"CDS": "DIF-Class 21 CDS Holding", "Default": "DIF-Class 21 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000178": {"Fund Names": {"Default": "DGF-Cell 8"}, "Password": "AAICD1968M"}, "BNPP00000458": {"Fund Names": {"Default": "DGF-Cell 9"}, "Password": "AAICD2891H"}, "DGF-Cell 10": {"Fund Names": {"Default": "DGF-Cell 10"}, "Password": "AAICD3412C"}, "BNPP00000480": {"Fund Names": {"Default": "DGF-Cell 11"}, "Password": "AAICD6359G"}, "BNPP00000488": {"Fund Names": {"Default": "DGF-Cell 13"}, "Password": "AAICD7821M"}, "BNPP00000540": {"Fund Names": {"Default": "DGF-Cell 16"}, "Password": "AAJCD5624K"}, "BNPP00000535": {"Fund Names": {"Default": "DGF-Cell 17"}, "Password": "AAJCD4991K"}, "DBSBK0000229": {"Fund Names": {"Default": "DGF-Cell 18"}, "Password": "AAJCD6205G"}, "DBSBK0000228": {"Fund Names": {"Default": "DGF-Cell 19"}, "Password": "AAJCD6049E"}, "DBSBK0000285": {"Fund Names": {"CDS": "DGF-Cell 23 CDS Holding", "Default": "DGF-Cell 23 Holding"}, "Password": "AAKCD6244Q"}, "DBSBK0000299": {"Fund Names": {"Default": "DGF-Cell 24 Holding"}, "Password": "AAKCD7324B"}, "DBSBK0000353": {"Fund Names": {"Default": "DGF-Cell 28 Holding"}, "Password": "AALCD1140J"}, "DBSBK0000354": {"Fund Names": {"Default": "DGF-Cell 29 Holding"}, "Password": "AALCD1141K"}, "DBSBK0000380": {"Fund Names": {"Default": "DGF-Cell 32 Holding"}, "Password": ""}, "DBSBK0000356": {"Fund Names": {"Default": "GlobalQ_AIF-III"}, "Password": ""}, "DGF-Cell 36": {"Fund Names": {"Default": "DGF-Cell 36"}, "Password": ""}, "DGF-Cell 38": {"Fund Names": {"Default": "DGF-Cell 38"}, "Password": ""}}
         
         # Default ASIO portfolio mapping
         if dataset_name == "asio_portfolio_mapping":
@@ -1130,6 +1460,131 @@ class DataConfigPage(tk.Frame):
                 "DIF-Class 8_HBE Capital": "DOVETAIL INDIA FUND CLASS 8 SHARES"
             }
         
+        # Default ASIO SF2 trade loader
+        if dataset_name == "asio_sf_2_trade_loader":
+            return {
+                "RecordAction": "InsertUpdate",
+                "KeyValue.KeyName": "",
+                "UserTranId1": "",
+                "Portfolio": "ASIO - SF 2_INR",
+                "LocationAccount": "Asio_Sub Fund_2_OHM_FO_KOTBK0001479",
+                "Broker": "",
+                "PriceDenomination": "CALC",
+                "CounterInvestment": "INR",
+                "NetInvestmentAmount": "CALC",
+                "NetCounterAmount": "CALC",
+                "tradeFX": "",
+                "ContractFxRateNumerator": "",
+                "ContractFxRateDenominator": "",
+                "ContractFxRate": "",
+                "NotionalAmount": "",
+                "FundStructure2": "CALC",
+                "SpotDate": "",
+                "PriceDirectly": "",
+                "CounterFXDenomination": "CALC",
+                "CounterTDateFx": "",
+                "AccruedInterest": "",
+                "InvestmentAccruedInterest": "",
+                "TradeExpenses.ExpenseNumber": "",
+                "TradeExpenses.ExpenseCode": "",
+                "TradeExpenses.ExpenseAmt": "",
+                "NonCapExpenses.NonCapNumber": "",
+                "NonCapExpenses.NonCapExpenseCode": "",
+                "NonCapExpenses.NonCapAmount": "",
+                "NonCapExpenses.NonCapCurrency": "",
+                "NonCapExpenses.LocationAccount": "",
+                "NonCapExpenses.NonCapLiabilityCode": "",
+                "NonCapExpenses.NonCapPaymentType": ""
+            }
+
+        # Default ASIO SF2 option security (FT/EQFT style)
+        if dataset_name == "asio_sf_2_option_security":
+            return {
+                "Exchange": "NSE",
+                "Issuer": "",
+                "Ticker": "",
+                "Cusip": "",
+                "Sedol": "",
+                "Isin": "",
+                "AltKey1": "",
+                "AltKey2": "",
+                "BloombergID": "",
+                "BloombergTicker": "",
+                "BloombergUniqueID": "",
+                "BloombergMarketSector": "",
+                "SettleDays": "",
+                "PricingFactor": "",
+                "TradingFactor": 1,
+                "CurrentPriceDayRange": 1,
+                "AssetType": "FT",
+                "InvestmentType": "EQFT",
+                "PriceDenomination": "INR",
+                "BifurcationCurrency": "INR",
+                "PrincipalCurrency": "INR",
+                "IncomeCurrency": "INR",
+                "RiskCurrency": "INR",
+                "IssueCountry": "IN",
+                "WithholdingTaxType": "Standard",
+                "QDIEligibilityFlag": "Not Eligible",
+                "SharesOutstanding": "",
+                "SubIndustry": "",
+                "SubIndustry2": "",
+                "QuantityPrecision": 3,
+                "InvestmentCrossZero": "Use Accounting Parameters",
+                "PriceByPreference": "Currency",
+                "ForwardPriceInterpolateFlag": 0,
+                "PricingPrecision": 3,
+                "FirstMarkDate": "01-01-2022",
+                "LastMarkDate": "",
+                "PriceList": "",
+                "AutoGenerateMarks": 1,
+                "CashSettlement": 1
+            }
+
+        # Default ASIO SF2 future security (FT/EQFT style)
+        if dataset_name == "asio_sf_2_future_security":
+            return {
+                "Exchange": "NSE",
+                "Issuer": "",
+                "Ticker": "",
+                "Cusip": "",
+                "Sedol": "",
+                "Isin": "",
+                "AltKey1": "",
+                "AltKey2": "",
+                "BloombergID": "",
+                "BloombergTicker": "",
+                "BloombergUniqueID": "",
+                "BloombergMarketSector": "",
+                "SettleDays": "",
+                "PricingFactor": "",
+                "TradingFactor": 1,
+                "CurrentPriceDayRange": 1,
+                "AssetType": "FT",
+                "InvestmentType": "EQFT",
+                "PriceDenomination": "INR",
+                "BifurcationCurrency": "INR",
+                "PrincipalCurrency": "INR",
+                "IncomeCurrency": "INR",
+                "RiskCurrency": "INR",
+                "IssueCountry": "IN",
+                "WithholdingTaxType": "Standard",
+                "QDIEligibilityFlag": "Not Eligible",
+                "SharesOutstanding": "",
+                "SubIndustry": "",
+                "SubIndustry2": "",
+                "QuantityPrecision": 3,
+                "InvestmentCrossZero": "Use Accounting Parameters",
+                "PriceByPreference": "Currency",
+                "ForwardPriceInterpolateFlag": 0,
+                "PricingPrecision": 3,
+                "FirstMarkDate": "01-01-2022",
+                "LastMarkDate": "",
+                "PriceList": "",
+                "AutoGenerateMarks": 1,
+                "CashSettlement": 1
+            }
+        
         # If default header fields are provided and this is the first dataset, seed from it
         first_name = next(iter(self.dataset_files.keys()), None)
         if dataset_name == first_name and DEFAULT_HEADER_FIELDS:
@@ -1148,9 +1603,9 @@ class DataConfigPage(tk.Frame):
                 with open(consolidated_path, "r") as f:
                     consolidated_data = json.load(f)
                     # Add datasets from consolidated file
-                    for dataset_name in ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
-                                        "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                                        "aafspl_car_future", "option_security", "car_trade_loader", "asio_sub_fund_2_trade", "geneva_custodian_mapping"]:
+                for dataset_name in ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
+                                    "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
+                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "geneva_custodian_mapping"]:
                         if dataset_name in consolidated_data:
                             datasets[dataset_name] = consolidated_path
             
@@ -1170,7 +1625,7 @@ class DataConfigPage(tk.Frame):
         # Always include these datasets (loaded from consolidated_data.json or defaults)
         for dataset_name in ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
                             "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                            "aafspl_car_future", "option_security", "car_trade_loader", "asio_sub_fund_2_trade", "geneva_custodian_mapping"]:
+                            "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "geneva_custodian_mapping"]:
             if dataset_name not in datasets:
                 datasets[dataset_name] = consolidated_path  # All come from consolidated file
         

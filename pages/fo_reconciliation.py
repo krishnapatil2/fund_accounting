@@ -8,12 +8,13 @@ import json
 from datetime import datetime
 import pandas as pd
 from my_app.CONSTANTS import CDS_GENEVA_HEADER_LIST, REG_GENEVA_HEADER_LIST
-from my_app.pages.helper import read_file
+from my_app.pages.helper import parse_expiry_date, read_file
 from my_app.pages.loading import LoadingSpinner
 from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 import io
 import zipfile
 import threading
+from collections import defaultdict
 
 # Header configurations for F&O files
 CDS_HOLDINGS_HEADER = ['Source.Name','Date','QuantityUnit','Exchange','ClientCode','TradingCode','UnderlyingCode','ClientName','UnderlyingName','InstrumentType','ExpiryDate','OptionType','StrikePrice','OpenBuy','OpenSell','TradedBuy','DayBuyValue','TradedSell','DaySellValue','ExcerciseQty','AllocationQty','NetBuy','NetSell','ContractSettlementPrice','Settlement Price','BloombergCodes','Concatenate','Fund Name In Geneva','UniqueCode','Netbuy-Netsell']
@@ -567,24 +568,12 @@ class FOReconciliationPage(tk.Frame):
         try:
             exchange = str(row['Exchange']).strip()
             underlying_code = str(row['UnderlyingCode']).strip()
-            expiry_str = str(row['ExpiryDate']).strip()
-            expiry_date = ""
-
-            try:
-                # Try parsing the expected format (08-10-2025 → YYYYMMDD)
-                expiry_date = datetime.strptime(expiry_str, "%d-%m-%Y").strftime("%Y%m%d")
-            except ValueError:
-                try:
-                    # Try alternate common format (YYYY-MM-DD)
-                    expiry_date = datetime.strptime(expiry_str, "%Y-%m-%d").strftime("%Y%m%d")
-                except ValueError:
-                    # If nothing works, leave it blank or original
-                    expiry_date = expiry_str  # or "" depending on your logic
+            expiry_date = parse_expiry_date(row['ExpiryDate'])
 
             option_type = str(row['OptionType']).strip()[0]
             strike_price = int(row['StrikePrice'])
-            
-            return f"{exchange}{underlying_code}{expiry_date}{option_type}{strike_price}"
+            concatenate_code = f"{exchange}{underlying_code}{expiry_date}{option_type}{strike_price}"
+            return concatenate_code
         except Exception as e:
             return ""
 
@@ -634,7 +623,7 @@ class FOReconciliationPage(tk.Frame):
                 row_values = [fund_name]
                 for v in row:
                     row_values.append(self._convert_to_numeric(v))
-                
+
                 # Add calculated fields
                 concatenate_code = self._create_concatenate_code(row)
                 client_name = str(row['ClientName']).strip()
@@ -895,91 +884,113 @@ class FOReconciliationPage(tk.Frame):
             summary_df = pd.DataFrame({'Message': ['No data found to export']})
             sheets_to_create.append(('Summary', summary_df))
         
+        # Prepare additional raw data sheets
         print("Preparing additional raw data sheets...")
+        self._build_geneva_reconciliation_data(data_dict)
         
+        return sheets_to_create
+
+    def _build_geneva_reconciliation_data(self, data_dict):
+        """Build CDS and REGULAR reconciliation with Geneva data"""
+        # Convert rows to dictionaries only once
         cds_rows = [dict(zip(CDS_HOLDINGS_HEADER, row)) for row in data_dict["CDS_HOLDINGS"]]
         regular_rows = [dict(zip(REGULAR_HOLDINGS_HEADERS, row)) for row in data_dict["REGULAR_HOLDINGS"]]
         geneva_rows = [dict(zip(self.dynamic_geneva_headers, row)) for row in data_dict["GENEVA_HOLDINGS"]]
-        nse_fo_bhavcopy_rows = [dict(zip(NSE_F_AND_O_BHAVCOPY, row)) for row in data_dict["NSE_F_AND_O_BHAVCOPY"]]
-
-        # --- Build lookup tables ---
-        cds_lookup = {
-            f"{r.get('Concatenate')}_{r.get('ClientName')}": r
-            for r in cds_rows
-        }
-        geneva_lookup = {
-            f"{r.get('Investment')}_{r.get('Portfolio')}": r
-            for r in geneva_rows
-        }
-
-        # --- Merge CDS + Geneva ---
-        all_keys = set(cds_lookup.keys()) | set(geneva_lookup.keys())
-
+        
+        # Load mappings
+        geneva_mapping = self._load_geneva_custodian_mapping()
+        
+        # Build Geneva investment-to-portfolios mapping
+        _geneva = defaultdict(list)
+        for row in geneva_rows:
+            inv = row.get("Investment")
+            port = row.get("Portfolio")
+            if inv and port and port not in _geneva[inv]:
+                _geneva[inv].append(port)
+        
+        # Build Geneva lookup
+        geneva_lookup = {f"{r.get('Investment')}_{r.get('Portfolio')}": r for r in geneva_rows}
+        
+        # Helper function to map client name to portfolio
+        def map_client_to_portfolio(client_name, concatenate):
+            """Maps client name to portfolio using geneva_mapping"""
+            match_keys = [k for k, v in geneva_mapping.items() if v == client_name]
+            portfolios = _geneva.get(concatenate, [])
+            
+            if match_keys:
+                # Prefer keys that are actually present in portfolios
+                preferred = [k for k in match_keys if k in portfolios]
+                return preferred[0] if preferred else match_keys[0]
+            elif len(portfolios) == 1:
+                return portfolios[0]
+            return None
+        
+        # Build CDS lookup
+        cds_lookup = {}
+        for r in cds_rows:
+            mapped_key = map_client_to_portfolio(r.get("ClientName"), r.get("Concatenate"))
+            lookup_key = f"{r.get('Concatenate')}_{mapped_key}"
+            cds_lookup[lookup_key] = r
+        
+        # Build REGULAR lookup
+        regular_lookup = {}
+        for r in regular_rows:
+            mapped_key = map_client_to_portfolio(r.get("ClientName"), r.get("Concatenate"))
+            lookup_key = f"{r.get('Concatenate')}_{mapped_key}"
+            regular_lookup[lookup_key] = r
+        
+        # Merge CDS + Geneva
+        cds_geneva_keys = set(cds_lookup.keys()) | set(geneva_lookup.keys())
         cds_geneva_data = []
-
-        for key in all_keys:
+        
+        for key in cds_geneva_keys:
             cds_row = cds_lookup.get(key)
             geneva_row = geneva_lookup.get(key)
-
-            # Safely handle numeric fields
-            # CDS holdings use 'Netbuy-Netsell' (correct spelling, unlike Regular which has typo)
+            
+            # Calculate values safely
             cds_val = float(cds_row.get('Netbuy-Netsell', 0) or 0) if cds_row else 0
             geneva_val = float(geneva_row.get('Traded Quantity', 0) or 0) if geneva_row else 0
-            # diff = geneva_val - cds_val
             diff = float(geneva_val - cds_val)
-
-            _row = self.geneva_with_cds_and_reg(
-                cds_row=cds_row,
-                regular_row=None,
-                geneva_row=geneva_row,
-                type="CDS"
-            )
-
-            # Append geneva_val (Traded Quantity) and diff (Difference) to the row
-            # _row has 49 fields (19 Geneva + 30 CDS fields)
-            # Adding 2 more fields makes 51 total, matching CDS_GENEVA_HEADER_LIST
-            row = _row + [geneva_val, diff]
-            cds_geneva_data.append(row)
-
+            
+            investment = str(geneva_row.get('Investment') or "") if geneva_row else ""
+            
+            # Include if both exist, or Geneva is NSECR, or only CDS exists
+            if (geneva_row and cds_row) or (geneva_row and "NSECR" in investment) or cds_row:
+                _row = self.geneva_with_cds_and_reg(
+                    cds_row=cds_row,
+                    regular_row=None,
+                    geneva_row=geneva_row,
+                    type="CDS"
+                )
+                cds_geneva_data.append(_row + [geneva_val, diff])
+        
+        # Merge REGULAR + Geneva (exclude keys already processed in CDS)
+        reg_geneva_keys = (set(regular_lookup.keys()) | set(geneva_lookup.keys())) - set(cds_lookup.keys())
         reg_geneva_data = []
-        regular_lookup = {
-                            f"{r.get('Concatenate')}_{r.get('ClientName')}": r
-                            for r in regular_rows
-                        }
-
-        # --- Combine both sets of keys ---
-        all_keys = set(regular_lookup.keys()) | set(geneva_lookup.keys())
-
-        for key in all_keys:
+        
+        for key in reg_geneva_keys:
             reg_row = regular_lookup.get(key)
             geneva_row = geneva_lookup.get(key)
-
-            # Safely handle numeric fields
-            # Note: Regular holdings header has typo 'NerBuy-Netsell' instead of 'Netbuy-Netsell'
+            
             reg_val = float(reg_row.get('NerBuy-Netsell', 0) or 0) if reg_row else 0
             geneva_val = float(geneva_row.get('Traded Quantity', 0) or 0) if geneva_row else 0
-
-            # diff = geneva_val - reg_val
             diff = float(geneva_val - reg_val)
- 
-            _row = self.geneva_with_cds_and_reg(
-                cds_row=None,
-                regular_row=reg_row,
-                geneva_row=geneva_row,
-                type="REGULAR"
-            )
-
-            # Append geneva_val (Traded Quantity) and diff (Difference Qty) to the row
-            # _row has 48 fields (19 Geneva + 29 Regular)
-            # Adding 2 more fields makes 50 total, matching REG_GENEVA_HEADER_LIST
-            row = _row + [geneva_val, diff]
-            reg_geneva_data.append(row)
-    
-        # Store the data as instance variables for creating additional Excel files
+            
+            investment = str(geneva_row.get('Investment') or "") if geneva_row else ""
+            
+            # Include if REGULAR exists, or Geneva is NSE but not NSECR
+            if reg_row or ("NSE" in investment and "NSECR" not in investment):
+                _row = self.geneva_with_cds_and_reg(
+                    cds_row=None,
+                    regular_row=reg_row,
+                    geneva_row=geneva_row,
+                    type="REGULAR"
+                )
+                reg_geneva_data.append(_row + [geneva_val, diff])
+        
+        # Store results
         self.cds_geneva_data = cds_geneva_data
         self.reg_geneva_data = reg_geneva_data
-    
-        return sheets_to_create
 
     def _create_master_file_data(self):
         """Create master file data with Geneva custodian mapping"""
@@ -1000,7 +1011,3 @@ class FOReconciliationPage(tk.Frame):
         except Exception as e:
             messagebox.showerror("Master File Error", f"Failed to create master file data:\n{str(e)}")
             return []
-
-# 'ClientName'=='Portfolio'
-# 'Investment'
-# 'Traded Quantity' == 'NetBuy'
