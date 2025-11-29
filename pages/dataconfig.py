@@ -47,6 +47,11 @@ class DataConfigPage(tk.Frame):
             "ELECMBL": 50,
         }
         self.lotsize_data = self.default_lotsize_data.copy()
+        self.default_underlying_code_data = {
+            "CRUDEOIL": 100,
+            "NATURALGAS": 1250,
+        }
+        self.underlying_code_data = self.default_underlying_code_data.copy()
         # Discover header datasets dynamically from JSON files
         self.dataset_files = self._discover_datasets()
         # Hold in-memory data per header dataset name
@@ -82,9 +87,11 @@ class DataConfigPage(tk.Frame):
             selector_frame,
             state="readonly",
             width=28,
-            values=["Lotsize"] + list(self.dataset_files.keys()),
+            values=["Lotsize", "UnderlyingCode"] + list(self.dataset_files.keys()),
             textvariable=self.dataset_var,
         )
+        # Store reference to update values later
+        self._base_dataset_values = ["Lotsize", "UnderlyingCode"]
         self.dataset_combo.pack(side="left", padx=(6, 0))
         refresh_btn = tk.Button(selector_frame, text="↻", width=3, command=self.refresh_datasets, bg="#ecf0f1", relief="flat")
         refresh_btn.pack(side="left", padx=(6, 0))
@@ -93,6 +100,8 @@ class DataConfigPage(tk.Frame):
             sel = self.dataset_combo.get()
             if sel == "Lotsize":
                 self.mode_var.set("LOTSIZE")
+            elif sel == "UnderlyingCode":
+                self.mode_var.set("UNDERLYINGCODE")
             else:
                 # Switch to header mode and point to the selected dataset
                 self.mode_var.set("HEADER")
@@ -158,7 +167,7 @@ class DataConfigPage(tk.Frame):
             # List of all expected datasets
             expected_datasets = ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
                                 "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                                "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "geneva_custodian_mapping"]
+                                "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "asio_sf_2_mcx_future_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_pricing_fno", "asio_pricing_mcx"]
             
             if os.path.exists(consolidated_path):
                 # Load file; if unreadable/empty, recreate with defaults
@@ -171,6 +180,7 @@ class DataConfigPage(tk.Frame):
                 if not isinstance(consolidated_data, dict) or not consolidated_data:
                     default_consolidated_data = {
                         "lotsize_data": self.default_lotsize_data.copy(),
+                        "underlying_code_data": self.default_underlying_code_data.copy(),
                         "fund_filename_map": {"DBSBK0000033": {"Fund Names": {"Default": "DIF-Class 1 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000036": {"Fund Names": {"Default": "DIF-Class 2 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000038": {"Fund Names": {"Default": "DIF-Class 3 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000042": {"Fund Names": {"Default": "DIF-Class 5 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000044": {"Fund Names": {"Default": "DIF-Class 6 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000043": {"Fund Names": {"Default": "DIF-Class 7 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000049": {"Fund Names": {"Default": "DIF-Class 8 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000050": {"Fund Names": {"Default": "DIF-Class 9 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000051": {"Fund Names": {"Default": "DIF-Class 10 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000052": {"Fund Names": {"Default": "DIF-Class 11 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000074": {"Fund Names": {"Default": "DIF-Class 12 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000179": {"Fund Names": {"Default": "DIF-Class 13 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000189": {"Fund Names": {"Default": "DIF-Class 14 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000192": {"Fund Names": {"Default": "DIF-Class 15 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000214": {"Fund Names": {"Default": "DIF-Class 16 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000216": {"Fund Names": {"Default": "DIF-Class 17 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000217": {"Fund Names": {"Default": "DIF-Class 18_Moon"}, "Password": "AAGCD0792B"}, "DBSBK0000232": {"Fund Names": {"Default": "DIF-Class 19 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000247": {"Fund Names": {"CDS": "DIF-Class 21 CDS Holding", "Default": "DIF-Class 21 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000178": {"Fund Names": {"Default": "DGF-Cell 8"}, "Password": "AAICD1968M"}, "BNPP00000458": {"Fund Names": {"Default": "DGF-Cell 9"}, "Password": "AAICD2891H"}, "DGF-Cell 10": {"Fund Names": {"Default": "DGF-Cell 10"}, "Password": "AAICD3412C"}, "BNPP00000480": {"Fund Names": {"Default": "DGF-Cell 11"}, "Password": "AAICD6359G"}, "BNPP00000488": {"Fund Names": {"Default": "DGF-Cell 13"}, "Password": "AAICD7821M"}, "BNPP00000540": {"Fund Names": {"Default": "DGF-Cell 16"}, "Password": "AAJCD5624K"}, "BNPP00000535": {"Fund Names": {"Default": "DGF-Cell 17"}, "Password": "AAJCD4991K"}, "DBSBK0000229": {"Fund Names": {"Default": "DGF-Cell 18"}, "Password": "AAJCD6205G"}, "DBSBK0000228": {"Fund Names": {"Default": "DGF-Cell 19"}, "Password": "AAJCD6049E"}, "DBSBK0000285": {"Fund Names": {"CDS": "DGF-Cell 23 CDS Holding", "Default": "DGF-Cell 23 Holding"}, "Password": "AAKCD6244Q"}, "DBSBK0000299": {"Fund Names": {"Default": "DGF-Cell 24 Holding"}, "Password": "AAKCD7324B"}, "DBSBK0000353": {"Fund Names": {"Default": "DGF-Cell 28 Holding"}, "Password": "AALCD1140J"}, "DBSBK0000354": {"Fund Names": {"Default": "DGF-Cell 29 Holding"}, "Password": "AALCD1141K"}, "DBSBK0000380": {"Fund Names": {"Default": "DGF-Cell 32 Holding"}, "Password": ""}, "DBSBK0000356": {"Fund Names": {"Default": "GlobalQ_AIF-III"}, "Password": ""}, "DGF-Cell 36": {"Fund Names": {"Default": "DGF-Cell 36"}, "Password": ""}, "DGF-Cell 38": {"Fund Names": {"Default": "DGF-Cell 38"}, "Password": ""}},
                         "asio_sf_2_trade_loader": {
                             "RecordAction": "InsertUpdate",
@@ -331,6 +341,123 @@ class DataConfigPage(tk.Frame):
                             "AutoGenerateMarks": 1,
                             "CashSettlement": 1
                         },
+                        "asio_sf_2_mcx_trade_loader": {
+                            "RecordAction": "InsertUpdate",
+                            "KeyValue.KeyName": "",
+                            "UserTranId1": "",
+                            "Portfolio": "ASIO - SF 2_INR",
+                            "LocationAccount": "Asio_Sub Fund_2_OHM_MCX_KOTBK0001479",
+                            "Broker": "",
+                            "PriceDenomination": "CALC",
+                            "CounterInvestment": "INR",
+                            "NetInvestmentAmount": "CALC",
+                            "NetCounterAmount": "CALC",
+                            "tradeFX": "",
+                            "ContractFxRateNumerator": "",
+                            "ContractFxRateDenominator": "",
+                            "ContractFxRate": "",
+                            "NotionalAmount": "",
+                            "FundStructure2": "CALC",
+                            "SpotDate": "",
+                            "PriceDirectly": "",
+                            "CounterFXDenomination": "CALC",
+                            "CounterTDateFx": "",
+                            "AccruedInterest": "",
+                            "InvestmentAccruedInterest": "",
+                            "TradeExpenses.ExpenseNumber": "",
+                            "TradeExpenses.ExpenseCode": "",
+                            "TradeExpenses.ExpenseAmt": "",
+                            "NonCapExpenses.NonCapNumber": "",
+                            "NonCapExpenses.NonCapExpenseCode": "",
+                            "NonCapExpenses.NonCapAmount": "",
+                            "NonCapExpenses.NonCapCurrency": "",
+                            "NonCapExpenses.LocationAccount": "",
+                            "NonCapExpenses.NonCapLiabilityCode": "",
+                            "NonCapExpenses.NonCapPaymentType": ""
+                        },
+                        "asio_sf_2_mcx_option_security": {
+                            "Exchange": "MCX",
+                            "Issuer": "",
+                            "Ticker": "",
+                            "Cusip": "",
+                            "Sedol": "",
+                            "Isin": "",
+                            "Riccode": "",
+                            "AltKey1": "",
+                            "AltKey2": "",
+                            "BloombergID": "",
+                            "BloombergTicker": "",
+                            "BloombergUniqueID": "",
+                            "BloombergMarketSector": "",
+                            "SettleDays": 0,
+                            "PricingFactor": 1,
+                            "CurrentPriceDayRange": 1,
+                            "AssetType": "OP",
+                            "InvestmentType": "CMOP",
+                            "PriceDenomination": "",
+                            "BifurcationCurrency": "INR",
+                            "PrincipalCurrency": "INR",
+                            "IncomeCurrency": "INR",
+                            "RiskCurrency": "INR",
+                            "IssueCountry": "IN",
+                            "WithholdingTaxType": "Standard",
+                            "QDIEligibilityFlag": "Not Eligible",
+                            "SharesOutstanding": "",
+                            "Beta": "",
+                            "SubIndustry": "",
+                            "SubIndustry2": "",
+                            "NonDeliverableCurrencyFlag": "",
+                            "QuantityPrecision": "",
+                            "InvestmentCrossZero": "",
+                            "PriceByPreference": "",
+                            "ForwardPriceInterpolateFlag": "",
+                            "SecFeeSchedule": "",
+                            "SecEligibleFlag": "",
+                            "WashSalesEligible": "",
+                            "ExerciseStyle": "European",
+                            "PricingPrecision": 15,
+                            "CashSettledFlag": 1
+                        },
+                        "asio_sf_2_mcx_future_security": {
+                            "Exchange": "MCX",
+                            "Issuer": "",
+                            "Ticker": "",
+                            "Cusip": "",
+                            "Sedol": "",
+                            "Isin": "",
+                            "AltKey1": "",
+                            "AltKey2": "",
+                            "BloombergID": "",
+                            "BloombergTicker": "",
+                            "BloombergUniqueID": "",
+                            "BloombergMarketSector": "",
+                            "SettleDays": "",
+                            "PricingFactor": "",
+                            "CurrentPriceDayRange": 1,
+                            "AssetType": "FT",
+                            "InvestmentType": "CMFT",
+                            "PriceDenomination": "INR",
+                            "BifurcationCurrency": "INR",
+                            "PrincipalCurrency": "INR",
+                            "IncomeCurrency": "INR",
+                            "RiskCurrency": "INR",
+                            "IssueCountry": "IN",
+                            "WithholdingTaxType": "Standard",
+                            "QDIEligibilityFlag": "Not Eligible",
+                            "SharesOutstanding": "",
+                            "SubIndustry": "",
+                            "SubIndustry2": "",
+                            "QuantityPrecision": 3,
+                            "InvestmentCrossZero": "Use Accounting Parameters",
+                            "PriceByPreference": "Currency",
+                            "ForwardPriceInterpolateFlag": 0,
+                            "PricingPrecision": 3,
+                            "FirstMarkDate": "01-01-2022",
+                            "LastMarkDate": "",
+                            "PriceList": "",
+                            "AutoGenerateMarks": 1,
+                            "CashSettlement": 1
+                        },
                         "car_trade_loader": {
                             "RecordAction": "InsertUpdate",
                             "KeyValue.KeyName": "",
@@ -363,8 +490,20 @@ class DataConfigPage(tk.Frame):
                             "NonCapExpenses.NonCapAmount": "",
                             "NonCapExpenses.NonCapCurrency": "",
                             "NonCapExpenses.LocationAccount": "",
-                            "NonCapExpenses.NonCapLiabilityCode": "",
-                            "NonCapExpenses.NonCapPaymentType": ""
+                        "NonCapExpenses.NonCapLiabilityCode": "",
+                        "NonCapExpenses.NonCapPaymentType": ""
+                        },
+                        "asio_pricing_fno": {
+                            "RecordAction": "InsertUpdate",
+                            "PriceDenomination": "INR",
+                            "PriceList": "NSE_Equity",
+                            "TaxLotID": ""
+                        },
+                        "asio_pricing_mcx": {
+                            "RecordAction": "InsertUpdate",
+                            "PriceDenomination": "INR",
+                            "PriceList": "NSE_Equity",
+                            "TaxLotID": ""
                         }
                     }
                     with open(consolidated_path, "w") as fw:
@@ -377,9 +516,32 @@ class DataConfigPage(tk.Frame):
                 
                 # Check for missing datasets and add defaults
                 needs_save = False
+                
+                # Load underlying code data - always ensure it exists
+                underlying_code_data = consolidated_data.get("underlying_code_data")
+                if underlying_code_data and isinstance(underlying_code_data, dict) and len(underlying_code_data) > 0:
+                    # Update with saved data
+                    self.underlying_code_data = underlying_code_data.copy()
+                else:
+                    # If not found or empty, initialize with defaults
+                    self.underlying_code_data = self.default_underlying_code_data.copy()
+                    consolidated_data["underlying_code_data"] = self.underlying_code_data.copy()
+                    needs_save = True
                 for dataset_name in expected_datasets:
                     if dataset_name in consolidated_data:
-                        self.datasets[dataset_name] = consolidated_data[dataset_name]
+                        # Normalize keys to strings for TM code mappings
+                        data = consolidated_data[dataset_name]
+                        # Check if data is empty dict and replace with defaults
+                        if isinstance(data, dict) and len(data) == 0:
+                            default_data = self._load_default_dataset_data(dataset_name)
+                            self.datasets[dataset_name] = default_data
+                            consolidated_data[dataset_name] = default_data
+                            needs_save = True
+                        elif dataset_name in ["fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name"]:
+                            normalized_data = {str(k).strip(): v for k, v in data.items()}
+                            self.datasets[dataset_name] = normalized_data
+                        else:
+                            self.datasets[dataset_name] = data
                     else:
                         # Dataset is missing, add default
                         default_data = self._load_default_dataset_data(dataset_name)
@@ -395,6 +557,7 @@ class DataConfigPage(tk.Frame):
                 # Create default consolidated data if file doesn't exist
                 default_consolidated_data = {
                     "lotsize_data": self.default_lotsize_data.copy(),
+                    "underlying_code_data": self.default_underlying_code_data.copy(),
                     "fund_filename_map": {"DBSBK0000033": {"Fund Names": {"Default": "DIF-Class 1 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000036": {"Fund Names": {"Default": "DIF-Class 2 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000038": {"Fund Names": {"Default": "DIF-Class 3 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000042": {"Fund Names": {"Default": "DIF-Class 5 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000044": {"Fund Names": {"Default": "DIF-Class 6 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000043": {"Fund Names": {"Default": "DIF-Class 7 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000049": {"Fund Names": {"Default": "DIF-Class 8 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000050": {"Fund Names": {"Default": "DIF-Class 9 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000051": {"Fund Names": {"Default": "DIF-Class 10 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000052": {"Fund Names": {"Default": "DIF-Class 11 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000074": {"Fund Names": {"Default": "DIF-Class 12 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000179": {"Fund Names": {"Default": "DIF-Class 13 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000189": {"Fund Names": {"Default": "DIF-Class 14 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000192": {"Fund Names": {"Default": "DIF-Class 15 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000214": {"Fund Names": {"Default": "DIF-Class 16 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000216": {"Fund Names": {"Default": "DIF-Class 17 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000217": {"Fund Names": {"Default": "DIF-Class 18_Moon"}, "Password": "AAGCD0792B"}, "DBSBK0000232": {"Fund Names": {"Default": "DIF-Class 19 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000247": {"Fund Names": {"CDS": "DIF-Class 21 CDS Holding", "Default": "DIF-Class 21 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000178": {"Fund Names": {"Default": "DGF-Cell 8"}, "Password": "AAICD1968M"}, "BNPP00000458": {"Fund Names": {"Default": "DGF-Cell 9"}, "Password": "AAICD2891H"}, "DGF-Cell 10": {"Fund Names": {"Default": "DGF-Cell 10"}, "Password": "AAICD3412C"}, "BNPP00000480": {"Fund Names": {"Default": "DGF-Cell 11"}, "Password": "AAICD6359G"}, "BNPP00000488": {"Fund Names": {"Default": "DGF-Cell 13"}, "Password": "AAICD7821M"}, "BNPP00000540": {"Fund Names": {"Default": "DGF-Cell 16"}, "Password": "AAJCD5624K"}, "BNPP00000535": {"Fund Names": {"Default": "DGF-Cell 17"}, "Password": "AAJCD4991K"}, "DBSBK0000229": {"Fund Names": {"Default": "DGF-Cell 18"}, "Password": "AAJCD6205G"}, "DBSBK0000228": {"Fund Names": {"Default": "DGF-Cell 19"}, "Password": "AAJCD6049E"}, "DBSBK0000285": {"Fund Names": {"CDS": "DGF-Cell 23 CDS Holding", "Default": "DGF-Cell 23 Holding"}, "Password": "AAKCD6244Q"}, "DBSBK0000299": {"Fund Names": {"Default": "DGF-Cell 24 Holding"}, "Password": "AAKCD7324B"}, "DBSBK0000353": {"Fund Names": {"Default": "DGF-Cell 28 Holding"}, "Password": "AALCD1140J"}, "DBSBK0000354": {"Fund Names": {"Default": "DGF-Cell 29 Holding"}, "Password": "AALCD1141K"}, "DBSBK0000380": {"Fund Names": {"Default": "DGF-Cell 32 Holding"}, "Password": ""}, "DBSBK0000356": {"Fund Names": {"Default": "GlobalQ_AIF-III"}, "Password": ""}, "DGF-Cell 36": {"Fund Names": {"Default": "DGF-Cell 36"}, "Password": ""}, "DGF-Cell 38": {"Fund Names": {"Default": "DGF-Cell 38"}, "Password": ""}},
                     "asio_sf_2_trade_loader": {
                         "RecordAction": "InsertUpdate",
@@ -450,6 +613,135 @@ class DataConfigPage(tk.Frame):
                             "CurrentPriceDayRange": 1,
                             "AssetType": "OP",
                             "InvestmentType": "IXOP",
+                            "PriceDenomination": "",
+                            "BifurcationCurrency": "INR",
+                            "PrincipalCurrency": "INR",
+                            "IncomeCurrency": "INR",
+                            "RiskCurrency": "INR",
+                            "IssueCountry": "IN",
+                            "WithholdingTaxType": "Standard",
+                            "QDIEligibilityFlag": "Not Eligible",
+                            "SharesOutstanding": "",
+                            "Beta": "",
+                            "SubIndustry": "",
+                            "SubIndustry2": "",
+                            "NonDeliverableCurrencyFlag": "",
+                            "QuantityPrecision": "",
+                            "InvestmentCrossZero": "",
+                            "PriceByPreference": "",
+                            "ForwardPriceInterpolateFlag": "",
+                            "SecFeeSchedule": "",
+                            "SecEligibleFlag": "",
+                            "WashSalesEligible": "",
+                            "ExerciseStyle": "European",
+                            "PricingPrecision": 15,
+                            "CashSettledFlag": 1
+                        },
+                        "asio_sf_2_mcx_future_security": {
+                            "Exchange": "MCX",
+                            "Issuer": "",
+                            "Ticker": "",
+                            "Cusip": "",
+                            "Sedol": "",
+                            "Isin": "",
+                            "AltKey1": "",
+                            "AltKey2": "",
+                            "BloombergID": "",
+                            "BloombergTicker": "",
+                            "BloombergUniqueID": "",
+                            "BloombergMarketSector": "",
+                            "SettleDays": "",
+                            "PricingFactor": "",
+                            "CurrentPriceDayRange": 1,
+                            "AssetType": "FT",
+                            "InvestmentType": "CMFT",
+                            "PriceDenomination": "INR",
+                            "BifurcationCurrency": "INR",
+                            "PrincipalCurrency": "INR",
+                            "IncomeCurrency": "INR",
+                            "RiskCurrency": "INR",
+                            "IssueCountry": "IN",
+                            "WithholdingTaxType": "Standard",
+                            "QDIEligibilityFlag": "Not Eligible",
+                            "SharesOutstanding": "",
+                            "SubIndustry": "",
+                            "SubIndustry2": "",
+                            "QuantityPrecision": 3,
+                            "InvestmentCrossZero": "Use Accounting Parameters",
+                            "PriceByPreference": "Currency",
+                            "ForwardPriceInterpolateFlag": 0,
+                            "PricingPrecision": 3,
+                            "FirstMarkDate": "01-01-2022",
+                            "LastMarkDate": "",
+                            "PriceList": "",
+                            "AutoGenerateMarks": 1,
+                            "CashSettlement": 1
+                        },
+                        "asio_sf_2_mcx_trade_loader": {
+                            "RecordAction": "InsertUpdate",
+                            "KeyValue.KeyName": "",
+                            "UserTranId1": "",
+                            "Portfolio": "ASIO - SF 2_INR",
+                            "LocationAccount": "Asio_Sub Fund_2_OHM_MCX_KOTBK0001479",
+                            "Broker": "",
+                            "PriceDenomination": "CALC",
+                            "CounterInvestment": "INR",
+                            "NetInvestmentAmount": "CALC",
+                            "NetCounterAmount": "CALC",
+                            "tradeFX": "",
+                            "ContractFxRateNumerator": "",
+                            "ContractFxRateDenominator": "",
+                            "ContractFxRate": "",
+                            "NotionalAmount": "",
+                            "FundStructure2": "CALC",
+                            "SpotDate": "",
+                            "PriceDirectly": "",
+                            "CounterFXDenomination": "CALC",
+                            "CounterTDateFx": "",
+                            "AccruedInterest": "",
+                            "InvestmentAccruedInterest": "",
+                            "TradeExpenses.ExpenseNumber": "",
+                            "TradeExpenses.ExpenseCode": "",
+                            "TradeExpenses.ExpenseAmt": "",
+                            "NonCapExpenses.NonCapNumber": "",
+                            "NonCapExpenses.NonCapExpenseCode": "",
+                            "NonCapExpenses.NonCapAmount": "",
+                            "NonCapExpenses.NonCapCurrency": "",
+                            "NonCapExpenses.LocationAccount": "",
+                            "NonCapExpenses.NonCapLiabilityCode": "",
+                            "NonCapExpenses.NonCapPaymentType": ""
+                        },
+                        "asio_pricing_fno": {
+                            "RecordAction": "InsertUpdate",
+                            "PriceDenomination": "INR",
+                            "PriceList": "NSE_Equity",
+                            "TaxLotID": ""
+                        },
+                        "asio_pricing_mcx": {
+                            "RecordAction": "InsertUpdate",
+                            "PriceDenomination": "INR",
+                            "PriceList": "NSE_Equity",
+                            "TaxLotID": ""
+                        },
+                        "asio_sf_2_mcx_option_security": {
+                            "Exchange": "MCX",
+                            "Issuer": "",
+                            "Ticker": "",
+                            "Cusip": "",
+                            "Sedol": "",
+                            "Isin": "",
+                            "Riccode": "",
+                            "AltKey1": "",
+                            "AltKey2": "",
+                            "BloombergID": "",
+                            "BloombergTicker": "",
+                            "BloombergUniqueID": "",
+                            "BloombergMarketSector": "",
+                            "SettleDays": 0,
+                            "PricingFactor": 1,
+                            "CurrentPriceDayRange": 1,
+                            "AssetType": "OP",
+                            "InvestmentType": "CMOP",
                             "PriceDenomination": "",
                             "BifurcationCurrency": "INR",
                             "PrincipalCurrency": "INR",
@@ -858,6 +1150,15 @@ class DataConfigPage(tk.Frame):
                         "DGF- Cell 36": "",
                         "DGF- Cell 38": "",
                         "DIF-Class 8_HBE Capital": "DOVETAIL INDIA FUND CLASS 8 SHARES"
+                    },
+                    "fno_tm_code_with_tm_name": {
+                        "13302": "Achintya Securities Pvt. Ltd.",
+                        "10412": "Motilal Oswal Financial Services Limited",
+                        "07536": "Trustline Securities Limited"
+                    },
+                    "mcx_tm_code_with_tm_name": {
+                        "31640": "Achintya Securities Pvt. Ltd.",
+                        "10515": "SMC Global Securities Limited"
                     }
                 }
                 
@@ -867,11 +1168,21 @@ class DataConfigPage(tk.Frame):
                 
                 # Load the data from the newly created file
                 self.lotsize_data.update(default_consolidated_data["lotsize_data"])
+                underlying_code_from_file = default_consolidated_data.get("underlying_code_data")
+                if underlying_code_from_file and isinstance(underlying_code_from_file, dict) and len(underlying_code_from_file) > 0:
+                    self.underlying_code_data = underlying_code_from_file.copy()
+                else:
+                    self.underlying_code_data = self.default_underlying_code_data.copy()
                 for dataset_name in ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
                                     "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "geneva_custodian_mapping"]:
+                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name"]:
                     if dataset_name in default_consolidated_data:
-                        self.datasets[dataset_name] = default_consolidated_data[dataset_name]
+                        data = default_consolidated_data[dataset_name]
+                        # Normalize keys to strings for TM code mappings
+                        if dataset_name in ["fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name"]:
+                            self.datasets[dataset_name] = {str(k).strip(): v for k, v in data.items()}
+                        else:
+                            self.datasets[dataset_name] = data
             # Keep alias in sync for current dataset
             self.header_data = self.datasets.get(self.current_dataset_name, {})
         except Exception as e:
@@ -883,6 +1194,9 @@ class DataConfigPage(tk.Frame):
         if self.mode_var.get() == "LOTSIZE":
             for symbol, lotsize in self.lotsize_data.items():
                 self.tree.insert("", "end", values=(symbol, lotsize))
+        elif self.mode_var.get() == "UNDERLYINGCODE":
+            for symbol, code in self.underlying_code_data.items():
+                self.tree.insert("", "end", values=(symbol, code))
         elif self.current_dataset_name == "fund_filename_map":
             # User-friendly display for fund_filename_map
             for fund_code, fund_data in self.header_data.items():
@@ -897,7 +1211,9 @@ class DataConfigPage(tk.Frame):
         else:
             for header, value in self.header_data.items():
                 display_value = json.dumps(value) if isinstance(value, (dict, list)) else value
-                self.tree.insert("", "end", values=(header, display_value))
+                # Ensure header is always inserted as string to preserve leading zeros
+                header_str = str(header) if header is not None else ""
+                self.tree.insert("", "end", values=(header_str, display_value))
         self.edit_btn.config(state="disabled", bg="#bdc3c7", fg="#7f8c8d", relief="flat", bd=1, font=("Arial", 12))
         self.delete_btn.config(state="disabled", bg="#bdc3c7", fg="#7f8c8d", relief="flat", bd=1, font=("Arial", 12))
         self.selected_info.config(text="Select a row to edit or delete", fg="#7f8c8d", font=("Arial", 10))
@@ -910,6 +1226,10 @@ class DataConfigPage(tk.Frame):
             for symbol, lotsize in self.lotsize_data.items():
                 if term in symbol.lower():
                     self.tree.insert("", "end", values=(symbol, lotsize))
+        elif self.mode_var.get() == "UNDERLYINGCODE":
+            for symbol, code in self.underlying_code_data.items():
+                if term in symbol.lower():
+                    self.tree.insert("", "end", values=(symbol, code))
         elif self.current_dataset_name == "fund_filename_map":
             # User-friendly filter for fund_filename_map
             for fund_code, fund_data in self.header_data.items():
@@ -939,6 +1259,9 @@ class DataConfigPage(tk.Frame):
             if self.mode_var.get() == "LOTSIZE":
                 symbol, lotsize = item["values"]
                 self.selected_info.config(text=f"Selected: {symbol} (Lotsize: {lotsize})", fg="#2c3e50", font=("Arial", 10, "bold"))
+            elif self.mode_var.get() == "UNDERLYINGCODE":
+                symbol, code = item["values"]
+                self.selected_info.config(text=f"Selected: {symbol} (Code: {code})", fg="#2c3e50", font=("Arial", 10, "bold"))
             else:
                 values = item["values"]
                 if self.current_dataset_name == "fund_filename_map":
@@ -950,6 +1273,12 @@ class DataConfigPage(tk.Frame):
                 elif self.current_dataset_name == "geneva_custodian_mapping":
                     header, val = values[0], values[1] if len(values) > 1 else ""
                     self.selected_info.config(text=f"Selected: Geneva: {header} | Custodian: {val}", fg="#2c3e50", font=("Arial", 10, "bold"))
+                elif self.current_dataset_name == "fno_tm_code_with_tm_name":
+                    header, val = values[0], values[1] if len(values) > 1 else ""
+                    self.selected_info.config(text=f"Selected: TM Code: {header} | TM Name: {val}", fg="#2c3e50", font=("Arial", 10, "bold"))
+                elif self.current_dataset_name == "mcx_tm_code_with_tm_name":
+                    header, val = values[0], values[1] if len(values) > 1 else ""
+                    self.selected_info.config(text=f"Selected: TM Code: {header} | TM Name: {val}", fg="#2c3e50", font=("Arial", 10, "bold"))
                 else:
                     header, val = values[0], values[1] if len(values) > 1 else ""
                     self.selected_info.config(text=f"Selected: Header: {header} (Value: {val})", fg="#2c3e50", font=("Arial", 10, "bold"))
@@ -967,6 +1296,9 @@ class DataConfigPage(tk.Frame):
         if self.mode_var.get() == "LOTSIZE":
             symbol, lotsize = item["values"]
             self.show_edit_dialog(symbol, lotsize)
+        elif self.mode_var.get() == "UNDERLYINGCODE":
+            symbol, code = item["values"]
+            self.show_edit_dialog(symbol, code, is_underlying_code=True)
         elif self.current_dataset_name == "fund_filename_map":
             values = item["values"]
             fund_code = values[0]
@@ -992,16 +1324,74 @@ class DataConfigPage(tk.Frame):
                 self.auto_save()
         else:
             values = item["values"]
+            if not values or len(values) == 0:
+                messagebox.showerror("Error", "Cannot delete: No data found in selected row")
+                return
+            # Ensure we're working with the dataset dictionary directly first
+            if self.current_dataset_name not in self.datasets:
+                self.datasets[self.current_dataset_name] = {}
+            dataset_dict = self.datasets[self.current_dataset_name]
+            self.header_data = dataset_dict  # Point to the same dictionary
+            
+            # Get identifier from tree - but tree might convert "07536" to 7536
+            # So we'll match by comparing with all dictionary keys
             identifier = values[0]  # First column is always the key
-            if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete '{identifier}'?"):
-                if identifier in self.header_data:
-                    del self.header_data[identifier]
-                self.load_data()
-                self.auto_save()
+            if identifier is None:
+                messagebox.showerror("Error", "Cannot delete: Invalid identifier")
+                return
+            
+            # Convert identifier to string (but this might lose leading zeros if tree converted it)
+            identifier_from_tree = str(identifier).strip()
+            
+            if not identifier_from_tree:
+                messagebox.showerror("Error", "Cannot delete: Invalid identifier")
+                return
+            
+            # Find the matching key in dictionary
+            # Tree might convert "07536" to 7536, so we match by row position
+            # since tree displays items in the same order as dictionary items
+            found_key = None
+            identifier_str_for_display = identifier_from_tree
+            
+            # Get the selected row index
+            selected_item = selection[0]
+            all_items = self.tree.get_children()
+            try:
+                row_index = all_items.index(selected_item)
+            except ValueError:
+                row_index = -1
+            
+            # Try exact match first
+            for key in dataset_dict.keys():
+                key_str = str(key).strip()
+                if key_str == identifier_from_tree:
+                    found_key = key
+                    identifier_str_for_display = key_str
+                    break
+            
+            # If not found by exact match and we have row index, match by position
+            # This handles cases where tree converted "07536" to 7536
+            if found_key is None and row_index >= 0:
+                keys_list = list(dataset_dict.keys())
+                if row_index < len(keys_list):
+                    found_key = keys_list[row_index]
+                    identifier_str_for_display = str(found_key).strip()
+            
+            if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete '{identifier_str_for_display}'?"):
+                if found_key is not None:
+                    del dataset_dict[found_key]
+                    self.load_data()
+                    self.auto_save()
+                else:
+                    # Debug: show what's actually in the data
+                    available_keys = list(dataset_dict.keys())[:10]  # First 10 keys for debugging
+                    messagebox.showerror("Error", f"Item '{identifier_from_tree}' not found in data.\n\nLooking for: '{identifier_from_tree}'\nAvailable keys: {', '.join(str(k) for k in available_keys) if available_keys else 'None'}")
 
     def add_new_item(self):
         if self.mode_var.get() == "LOTSIZE":
             self.show_edit_dialog()
+        elif self.mode_var.get() == "UNDERLYINGCODE":
+            self.show_edit_dialog(is_underlying_code=True)
         elif self.current_dataset_name == "fund_filename_map":
             self.show_fund_edit_dialog()
         else:
@@ -1016,6 +1406,9 @@ class DataConfigPage(tk.Frame):
         if self.mode_var.get() == "LOTSIZE":
             symbol, lotsize = item["values"]
             self.show_edit_dialog(symbol, lotsize)
+        elif self.mode_var.get() == "UNDERLYINGCODE":
+            symbol, code = item["values"]
+            self.show_edit_dialog(symbol, code, is_underlying_code=True)
         elif self.current_dataset_name == "fund_filename_map":
             values = item["values"]
             fund_code = values[0]
@@ -1027,7 +1420,7 @@ class DataConfigPage(tk.Frame):
             header, value = item["values"]
             self.show_header_edit_dialog(header, value)
 
-    def show_edit_dialog(self, symbol="", lotsize=""):
+    def show_edit_dialog(self, symbol="", lotsize="", is_underlying_code=False):
         dialog = tk.Toplevel(self)
         dialog.title("Edit Item" if symbol else "Add New Item")
         dialog.geometry("400x200")
@@ -1041,29 +1434,37 @@ class DataConfigPage(tk.Frame):
         symbol_entry = tk.Entry(symbol_frame, font=("Arial", 12), width=30)
         symbol_entry.pack(fill="x", pady=5)
         symbol_entry.insert(0, symbol)
-        lotsize_frame = tk.Frame(dialog, bg="#ecf0f1")
-        lotsize_frame.pack(fill="x", padx=20, pady=10)
-        tk.Label(lotsize_frame, text="Lotsize:", font=("Arial", 12), bg="#ecf0f1").pack(anchor="w")
-        lotsize_entry = tk.Entry(lotsize_frame, font=("Arial", 12), width=30)
-        lotsize_entry.pack(fill="x", pady=5)
-        lotsize_entry.insert(0, str(lotsize))
+        value_frame = tk.Frame(dialog, bg="#ecf0f1")
+        value_frame.pack(fill="x", padx=20, pady=10)
+        value_label_text = "Code:" if is_underlying_code else "Lotsize:"
+        tk.Label(value_frame, text=value_label_text, font=("Arial", 12), bg="#ecf0f1").pack(anchor="w")
+        value_entry = tk.Entry(value_frame, font=("Arial", 12), width=30)
+        value_entry.pack(fill="x", pady=5)
+        value_entry.insert(0, str(lotsize))
         button_frame = tk.Frame(dialog, bg="#ecf0f1")
         button_frame.pack(fill="x", padx=20, pady=20)
 
         def save_changes():
             new_symbol = symbol_entry.get().strip().upper()
-            new_lotsize = lotsize_entry.get().strip()
-            if not new_symbol or not new_lotsize:
-                messagebox.showerror("Error", "Both Symbol and Lotsize are required")
+            new_value = value_entry.get().strip()
+            if not new_symbol or not new_value:
+                error_msg = "Both Symbol and Code are required" if is_underlying_code else "Both Symbol and Lotsize are required"
+                messagebox.showerror("Error", error_msg)
                 return
             try:
-                lotsize_value = int(new_lotsize)
+                value = int(new_value)
             except ValueError:
-                messagebox.showerror("Error", "Lotsize must be a valid number")
+                error_msg = "Code must be a valid number" if is_underlying_code else "Lotsize must be a valid number"
+                messagebox.showerror("Error", error_msg)
                 return
-            if symbol and symbol != new_symbol:
-                del self.lotsize_data[symbol]
-            self.lotsize_data[new_symbol] = lotsize_value
+            if is_underlying_code:
+                if symbol and symbol != new_symbol:
+                    del self.underlying_code_data[symbol]
+                self.underlying_code_data[new_symbol] = value
+            else:
+                if symbol and symbol != new_symbol:
+                    del self.lotsize_data[symbol]
+                self.lotsize_data[new_symbol] = value
             self.load_data()
             self.auto_save()
             dialog.destroy()
@@ -1174,12 +1575,68 @@ class DataConfigPage(tk.Frame):
                 self.auto_save()
         else:
             values = item["values"]
+            if not values or len(values) == 0:
+                messagebox.showerror("Error", "Cannot delete: No data found in selected row")
+                return
+            # Ensure we're working with the dataset dictionary directly first
+            if self.current_dataset_name not in self.datasets:
+                self.datasets[self.current_dataset_name] = {}
+            dataset_dict = self.datasets[self.current_dataset_name]
+            self.header_data = dataset_dict  # Point to the same dictionary
+            
+            # Get identifier from tree - but tree might convert "07536" to 7536
+            # So we'll match by comparing with all dictionary keys
             identifier = values[0]
-            if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete '{identifier}'?"):
-                if identifier in self.header_data:
-                    del self.header_data[identifier]
-                self.load_data()
-                self.auto_save()
+            if identifier is None:
+                messagebox.showerror("Error", "Cannot delete: Invalid identifier")
+                return
+            
+            # Convert identifier to string (but this might lose leading zeros if tree converted it)
+            identifier_from_tree = str(identifier).strip()
+            
+            if not identifier_from_tree:
+                messagebox.showerror("Error", "Cannot delete: Invalid identifier")
+                return
+            
+            # Find the matching key in dictionary
+            # Tree might convert "07536" to 7536, so we match by row position
+            # since tree displays items in the same order as dictionary items
+            found_key = None
+            identifier_str_for_display = identifier_from_tree
+            
+            # Get the selected row index
+            selected_item = selection[0]
+            all_items = self.tree.get_children()
+            try:
+                row_index = all_items.index(selected_item)
+            except ValueError:
+                row_index = -1
+            
+            # Try exact match first
+            for key in dataset_dict.keys():
+                key_str = str(key).strip()
+                if key_str == identifier_from_tree:
+                    found_key = key
+                    identifier_str_for_display = key_str
+                    break
+            
+            # If not found by exact match and we have row index, match by position
+            # This handles cases where tree converted "07536" to 7536
+            if found_key is None and row_index >= 0:
+                keys_list = list(dataset_dict.keys())
+                if row_index < len(keys_list):
+                    found_key = keys_list[row_index]
+                    identifier_str_for_display = str(found_key).strip()
+            
+            if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete '{identifier_str_for_display}'?"):
+                if found_key is not None:
+                    del dataset_dict[found_key]
+                    self.load_data()
+                    self.auto_save()
+                else:
+                    # Debug: show what's actually in the data
+                    available_keys = list(dataset_dict.keys())[:10]  # First 10 keys for debugging
+                    messagebox.showerror("Error", f"Item '{identifier_from_tree}' not found in data.\n\nLooking for: '{identifier_from_tree}'\nAvailable keys: {', '.join(str(k) for k in available_keys) if available_keys else 'None'}")
 
     def show_context_menu(self, event):
         selection = self.tree.selection()
@@ -1204,8 +1661,14 @@ class DataConfigPage(tk.Frame):
             # Update the appropriate section
             if self.mode_var.get() == "LOTSIZE":
                 consolidated_data["lotsize_data"] = self.lotsize_data
+            elif self.mode_var.get() == "UNDERLYINGCODE":
+                consolidated_data["underlying_code_data"] = self.underlying_code_data
             else:
                 consolidated_data[self.current_dataset_name] = self.header_data
+            
+            # Always save underlying_code_data and lotsize_data to ensure they're persisted
+            consolidated_data["underlying_code_data"] = self.underlying_code_data
+            consolidated_data["lotsize_data"] = self.lotsize_data
             
             # Save consolidated data
             with open(consolidated_path, "w") as f:
@@ -1231,8 +1694,14 @@ class DataConfigPage(tk.Frame):
             # Update the appropriate section
             if self.mode_var.get() == "LOTSIZE":
                 consolidated_data["lotsize_data"] = self.lotsize_data
+            elif self.mode_var.get() == "UNDERLYINGCODE":
+                consolidated_data["underlying_code_data"] = self.underlying_code_data
             else:
                 consolidated_data[self.current_dataset_name] = self.header_data
+            
+            # Always save underlying_code_data and lotsize_data to ensure they're persisted
+            consolidated_data["underlying_code_data"] = self.underlying_code_data
+            consolidated_data["lotsize_data"] = self.lotsize_data
             
             # Save consolidated data
             with open(consolidated_path, "w") as f:
@@ -1259,6 +1728,14 @@ class DataConfigPage(tk.Frame):
                         messagebox.showinfo("Success", "Data loaded successfully!")
                     else:
                         messagebox.showwarning("Warning", "No lotsize data found in consolidated file")
+                elif self.mode_var.get() == "UNDERLYINGCODE":
+                    underlying_code_data = consolidated_data.get("underlying_code_data", {})
+                    if underlying_code_data:
+                        self.underlying_code_data = underlying_code_data
+                        self.load_data()
+                        messagebox.showinfo("Success", "Data loaded successfully!")
+                    else:
+                        messagebox.showwarning("Warning", "No underlying code data found in consolidated file")
                 else:
                     dataset_data = consolidated_data.get(self.current_dataset_name, {})
                     if dataset_data:
@@ -1277,6 +1754,8 @@ class DataConfigPage(tk.Frame):
         if messagebox.askyesno("Confirm Reset", "Are you sure you want to reset to default values? This will overwrite current data."):
             if self.mode_var.get() == "LOTSIZE":
                 self.lotsize_data = self.default_lotsize_data.copy()
+            elif self.mode_var.get() == "UNDERLYINGCODE":
+                self.underlying_code_data = self.default_underlying_code_data.copy()
             else:
                 # Reset selected header dataset to its defaults
                 self.header_data = self._load_default_dataset_data(self.current_dataset_name)
@@ -1460,6 +1939,21 @@ class DataConfigPage(tk.Frame):
                 "DIF-Class 8_HBE Capital": "DOVETAIL INDIA FUND CLASS 8 SHARES"
             }
         
+        # Default FNO TM Code to TM Name mapping
+        if dataset_name == "fno_tm_code_with_tm_name":
+            return {
+                "13302": "Achintya Securities Pvt. Ltd.",
+                "07536": "Trustline Securities Limited",
+                "10412": "Motilal Oswal Financial Services Limited"
+            }
+        
+        # Default MCX TM Code to TM Name mapping
+        if dataset_name == "mcx_tm_code_with_tm_name":
+            return {
+                    "31640": "Achintya Securities Pvt. Ltd.",
+                    "10515": "SMC Global Securities Limited"
+            }
+        
         # Default ASIO SF2 trade loader
         if dataset_name == "asio_sf_2_trade_loader":
             return {
@@ -1541,6 +2035,87 @@ class DataConfigPage(tk.Frame):
                 "CashSettlement": 1
             }
 
+        if dataset_name == "asio_sf_2_mcx_trade_loader":
+            return {
+                "RecordAction": "InsertUpdate",
+                "KeyValue.KeyName": "",
+                "UserTranId1": "",
+                "Portfolio": "ASIO - SF 2_INR",
+                "LocationAccount": "Asio_Sub Fund_2_OHM_MCX_KOTBK0001479",
+                "Broker": "",
+                "PriceDenomination": "CALC",
+                "CounterInvestment": "INR",
+                "NetInvestmentAmount": "CALC",
+                "NetCounterAmount": "CALC",
+                "tradeFX": "",
+                "ContractFxRateNumerator": "",
+                "ContractFxRateDenominator": "",
+                "ContractFxRate": "",
+                "NotionalAmount": "",
+                "FundStructure2": "CALC",
+                "SpotDate": "",
+                "PriceDirectly": "",
+                "CounterFXDenomination": "CALC",
+                "CounterTDateFx": "",
+                "AccruedInterest": "",
+                "InvestmentAccruedInterest": "",
+                "TradeExpenses.ExpenseNumber": "",
+                "TradeExpenses.ExpenseCode": "",
+                "TradeExpenses.ExpenseAmt": "",
+                "NonCapExpenses.NonCapNumber": "",
+                "NonCapExpenses.NonCapExpenseCode": "",
+                "NonCapExpenses.NonCapAmount": "",
+                "NonCapExpenses.NonCapCurrency": "",
+                "NonCapExpenses.LocationAccount": "",
+                "NonCapExpenses.NonCapLiabilityCode": "",
+                "NonCapExpenses.NonCapPaymentType": ""
+            }
+
+        if dataset_name == "asio_sf_2_mcx_option_security":
+            return {
+                "Exchange": "MCX",
+                "Issuer": "",
+                "Ticker": "",
+                "Cusip": "",
+                "Sedol": "",
+                "Isin": "",
+                "Riccode": "",
+                "AltKey1": "",
+                "AltKey2": "",
+                "BloombergID": "",
+                "BloombergTicker": "",
+                "BloombergUniqueID": "",
+                "BloombergMarketSector": "",
+                "SettleDays": 0,
+                "PricingFactor": 1,
+                "CurrentPriceDayRange": 1,
+                "AssetType": "OP",
+                "InvestmentType": "CMOP",
+                "PriceDenomination": "",
+                "BifurcationCurrency": "INR",
+                "PrincipalCurrency": "INR",
+                "IncomeCurrency": "INR",
+                "RiskCurrency": "INR",
+                "IssueCountry": "IN",
+                "WithholdingTaxType": "Standard",
+                "QDIEligibilityFlag": "Not Eligible",
+                "SharesOutstanding": "",
+                "Beta": "",
+                "SubIndustry": "",
+                "SubIndustry2": "",
+                "NonDeliverableCurrencyFlag": "",
+                "QuantityPrecision": "",
+                "InvestmentCrossZero": "",
+                "PriceByPreference": "",
+                "ForwardPriceInterpolateFlag": "",
+                "SecFeeSchedule": "",
+                "SecEligibleFlag": "",
+                "WashSalesEligible": "",
+                "ExerciseStyle": "European",
+                "PricingPrecision": 15,
+                "CashSettledFlag": 1
+            }
+
         # Default ASIO SF2 future security (FT/EQFT style)
         if dataset_name == "asio_sf_2_future_security":
             return {
@@ -1575,6 +2150,50 @@ class DataConfigPage(tk.Frame):
                 "SubIndustry2": "",
                 "QuantityPrecision": 3,
                 "InvestmentCrossZero": "Use Accounting Parameters",
+                "StrikePrice":0,
+                "PriceByPreference": "Currency",
+                "ForwardPriceInterpolateFlag": 0,
+                "PricingPrecision": 3,
+                "FirstMarkDate": "01-01-2022",
+                "LastMarkDate": "",
+                "PriceList": "",
+                "AutoGenerateMarks": 1,
+                "CashSettlement": 1
+            }
+        
+        # Default ASIO SF2 MCX future security (FT/CMFT style)
+        if dataset_name == "asio_sf_2_mcx_future_security":
+            return {
+                "Exchange": "MCX",
+                "Issuer": "",
+                "Ticker": "",
+                "Cusip": "",
+                "Sedol": "",
+                "Isin": "",
+                "AltKey1": "",
+                "AltKey2": "",
+                "BloombergID": "",
+                "BloombergTicker": "",
+                "BloombergUniqueID": "",
+                "BloombergMarketSector": "",
+                "SettleDays": "",
+                "PricingFactor": "",
+                "CurrentPriceDayRange": 1,
+                "AssetType": "FT",
+                "InvestmentType": "CMFT",
+                "PriceDenomination": "INR",
+                "BifurcationCurrency": "INR",
+                "PrincipalCurrency": "INR",
+                "IncomeCurrency": "INR",
+                "RiskCurrency": "INR",
+                "IssueCountry": "IN",
+                "WithholdingTaxType": "Standard",
+                "QDIEligibilityFlag": "Not Eligible",
+                "SharesOutstanding": "",
+                "SubIndustry": "",
+                "SubIndustry2": "",
+                "QuantityPrecision": 3,
+                "InvestmentCrossZero": "Use Accounting Parameters",
                 "PriceByPreference": "Currency",
                 "ForwardPriceInterpolateFlag": 0,
                 "PricingPrecision": 3,
@@ -1590,6 +2209,24 @@ class DataConfigPage(tk.Frame):
         if dataset_name == first_name and DEFAULT_HEADER_FIELDS:
             return {field: "" for field in DEFAULT_HEADER_FIELDS}
         # Otherwise default to empty mapping
+        # Default ASIO Pricing FNO
+        if dataset_name == "asio_pricing_fno":
+            return {
+                "RecordAction": "InsertUpdate",
+                "PriceDenomination": "INR",
+                "PriceList": "NSE_Equity",
+                "TaxLotID": ""
+            }
+        
+        # Default ASIO Pricing MCX
+        if dataset_name == "asio_pricing_mcx":
+            return {
+                "RecordAction": "InsertUpdate",
+                "PriceDenomination": "INR",
+                "PriceList": "NSE_Equity",
+                "TaxLotID": ""
+            }
+        
         return {}
 
     def _discover_datasets(self):
@@ -1605,7 +2242,7 @@ class DataConfigPage(tk.Frame):
                     # Add datasets from consolidated file
                 for dataset_name in ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
                                     "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "geneva_custodian_mapping"]:
+                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_pricing_fno", "asio_pricing_mcx"]:
                         if dataset_name in consolidated_data:
                             datasets[dataset_name] = consolidated_path
             
@@ -1625,7 +2262,7 @@ class DataConfigPage(tk.Frame):
         # Always include these datasets (loaded from consolidated_data.json or defaults)
         for dataset_name in ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
                             "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                            "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "geneva_custodian_mapping"]:
+                            "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "asio_sf_2_mcx_future_security", "geneva_custodian_mapping"]:
             if dataset_name not in datasets:
                 datasets[dataset_name] = consolidated_path  # All come from consolidated file
         
@@ -1643,10 +2280,15 @@ class DataConfigPage(tk.Frame):
                 self.datasets[dataset_name] = self._load_default_dataset_data(dataset_name)
         self.header_data = self.datasets.get(self.current_dataset_name, {})
         # Update combobox options
-        values = ["Lotsize"] + list(self.dataset_files.keys())
+        values = ["Lotsize", "UnderlyingCode"] + list(self.dataset_files.keys())
         self.dataset_combo.configure(values=values)
         # Keep selection consistent in UI
-        self.dataset_var.set("Lotsize" if self.mode_var.get() == "LOTSIZE" else self.current_dataset_name)
+        if self.mode_var.get() == "LOTSIZE":
+            self.dataset_var.set("Lotsize")
+        elif self.mode_var.get() == "UNDERLYINGCODE":
+            self.dataset_var.set("UnderlyingCode")
+        else:
+            self.dataset_var.set(self.current_dataset_name)
 
     def _infer_type(self, value):
         if isinstance(value, bool):
@@ -1690,6 +2332,14 @@ class DataConfigPage(tk.Frame):
             field_label = "Fund name in Geneva:"
             value_label = "Fund name in Cust Holding:"
             dialog_title = "Edit Geneva-Custodian Mapping" if field_name else "Add Geneva-Custodian Mapping"
+        elif self.current_dataset_name == "fno_tm_code_with_tm_name":
+            field_label = "TM Code:"
+            value_label = "TM Name:"
+            dialog_title = "Edit FNO TM Code Mapping" if field_name else "Add FNO TM Code Mapping"
+        elif self.current_dataset_name == "mcx_tm_code_with_tm_name":
+            field_label = "TM Code:"
+            value_label = "TM Name:"
+            dialog_title = "Edit MCX TM Code Mapping" if field_name else "Add MCX TM Code Mapping"
         elif self.current_dataset_name in ["asio_format_1_headers", "asio_format_2_headers", "asio_bhavcopy_headers", "asio_geneva_headers"]:
             field_label = "Header Key:"
             value_label = "Header Name:"
@@ -1739,6 +2389,10 @@ class DataConfigPage(tk.Frame):
                     error_msg = "Portfolio is required"
                 elif self.current_dataset_name == "geneva_custodian_mapping":
                     error_msg = "Fund name in Geneva is required"
+                elif self.current_dataset_name == "fno_tm_code_with_tm_name":
+                    error_msg = "TM Code is required"
+                elif self.current_dataset_name == "mcx_tm_code_with_tm_name":
+                    error_msg = "TM Code is required"
                 elif self.current_dataset_name in ["asio_format_1_headers", "asio_format_2_headers", "asio_bhavcopy_headers", "asio_geneva_headers"]:
                     error_msg = "Header Key is required"
                 else:
@@ -1749,9 +2403,26 @@ class DataConfigPage(tk.Frame):
                 new_value = json.loads(raw)
             except Exception:
                 new_value = self._cast_from_string(raw)
-            if field_name and field_name != new_field and field_name in self.header_data:
-                del self.header_data[field_name]
-            self.header_data[new_field] = new_value
+            # Ensure we're working with the dataset dictionary directly
+            if self.current_dataset_name not in self.datasets:
+                self.datasets[self.current_dataset_name] = {}
+            dataset_dict = self.datasets[self.current_dataset_name]
+            self.header_data = dataset_dict  # Point to the same dictionary
+            
+            # Convert field name to string for consistent storage
+            new_field_str = str(new_field).strip()
+            
+            # If editing existing field, delete old key (try both string and original type)
+            if field_name:
+                old_field_str = str(field_name).strip()
+                # Try to find and delete old key regardless of type
+                for key in list(dataset_dict.keys()):
+                    if str(key).strip() == old_field_str:
+                        del dataset_dict[key]
+                        break
+            
+            # Always store with string key
+            dataset_dict[new_field_str] = new_value
             self.load_data()
             self.auto_save()
             dialog.destroy()
@@ -1776,6 +2447,13 @@ class DataConfigPage(tk.Frame):
             self.tree.heading("Lotsize", text="Lotsize")
             self.tree.column("Symbol", width=200, anchor="w")
             self.tree.column("Lotsize", width=100, anchor="center")
+        elif self.mode_var.get() == "UNDERLYINGCODE":
+            cols = ("Symbol", "Code")
+            self.tree.configure(columns=cols)
+            self.tree.heading("Symbol", text="Symbol")
+            self.tree.heading("Code", text="Code")
+            self.tree.column("Symbol", width=200, anchor="w")
+            self.tree.column("Code", width=100, anchor="center")
         elif self.current_dataset_name == "fund_filename_map":
             # Special 4-column layout for fund_filename_map
             cols = ("Custodian Account", "Fund Name", "Fund CDS Name", "Password")
@@ -1799,6 +2477,12 @@ class DataConfigPage(tk.Frame):
             elif self.current_dataset_name == "geneva_custodian_mapping":
                 self.tree.heading("Header", text="Fund name in Geneva")
                 self.tree.heading("Value", text="Fund name in Cust Holding")
+            elif self.current_dataset_name == "fno_tm_code_with_tm_name":
+                self.tree.heading("Header", text="TM Code")
+                self.tree.heading("Value", text="TM Name")
+            elif self.current_dataset_name == "mcx_tm_code_with_tm_name":
+                self.tree.heading("Header", text="TM Code")
+                self.tree.heading("Value", text="TM Name")
             else:
                 self.tree.heading("Header", text="Header")
                 self.tree.heading("Value", text="Value")
