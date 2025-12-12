@@ -106,9 +106,28 @@ class DataConfigPage(tk.Frame):
                 # Switch to header mode and point to the selected dataset
                 self.mode_var.set("HEADER")
                 self.current_dataset_name = sel
-                # Ensure dataset exists in memory
-                if sel not in self.datasets:
-                    self.datasets[sel] = self._load_default_dataset_data(sel)
+                # Ensure dataset exists in memory - try to load from consolidated_data.json first
+                if sel not in self.datasets or not self.datasets[sel]:
+                    # Try to load from consolidated_data.json
+                    try:
+                        from my_app.file_utils import get_app_directory
+                        app_dir = get_app_directory()
+                        consolidated_path = os.path.join(app_dir, "consolidated_data.json")
+                        if os.path.exists(consolidated_path):
+                            with open(consolidated_path, "r", encoding="utf-8") as f:
+                                consolidated_data = json.load(f)
+                                if sel in consolidated_data:
+                                    self.datasets[sel] = consolidated_data[sel]
+                                else:
+                                    # Load default if not found
+                                    self.datasets[sel] = self._load_default_dataset_data(sel)
+                        else:
+                            # File doesn't exist, use default
+                            self.datasets[sel] = self._load_default_dataset_data(sel)
+                    except Exception as e:
+                        # On error, use default
+                        print(f"Error loading dataset {sel}: {e}")
+                        self.datasets[sel] = self._load_default_dataset_data(sel)
                 self.header_data = self.datasets[sel]
             self.configure_tree_for_mode()
             self.load_data()
@@ -167,7 +186,7 @@ class DataConfigPage(tk.Frame):
             # List of all expected datasets
             expected_datasets = ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
                                 "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                                "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "asio_sf_2_mcx_future_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_pricing_fno", "asio_pricing_mcx"]
+                                "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "asio_sf_2_mcx_future_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_pricing_fno", "asio_pricing_mcx", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config"]
             
             if os.path.exists(consolidated_path):
                 # Load file; if unreadable/empty, recreate with defaults
@@ -504,6 +523,11 @@ class DataConfigPage(tk.Frame):
                             "PriceDenomination": "INR",
                             "PriceList": "NSE_Equity",
                             "TaxLotID": ""
+                        },
+                        "asio_sf4_trading_code_mapping": {
+                            "FT": "Asio_Sub Fund_4_DBS_INR_8811210011631187",
+                            "FT1": "Asio_Sub Fund_4_DBS_INR_8811210011631187_FT1",
+                            "FT2": "Asio_Sub Fund_4_DBS_INR_8811210011631187_FT2"
                         }
                     }
                     with open(consolidated_path, "w") as fw:
@@ -1154,7 +1178,8 @@ class DataConfigPage(tk.Frame):
                     "fno_tm_code_with_tm_name": {
                         "13302": "Achintya Securities Pvt. Ltd.",
                         "10412": "Motilal Oswal Financial Services Limited",
-                        "07536": "Trustline Securities Limited"
+                        "07536": "Trustline Securities Limited",
+                        "07714": "SMC Global Securities Limited"
                     },
                     "mcx_tm_code_with_tm_name": {
                         "31640": "Achintya Securities Pvt. Ltd.",
@@ -1175,7 +1200,7 @@ class DataConfigPage(tk.Frame):
                     self.underlying_code_data = self.default_underlying_code_data.copy()
                 for dataset_name in ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
                                     "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name"]:
+                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config"]:
                     if dataset_name in default_consolidated_data:
                         data = default_consolidated_data[dataset_name]
                         # Normalize keys to strings for TM code mappings
@@ -1944,7 +1969,8 @@ class DataConfigPage(tk.Frame):
             return {
                 "13302": "Achintya Securities Pvt. Ltd.",
                 "07536": "Trustline Securities Limited",
-                "10412": "Motilal Oswal Financial Services Limited"
+                "10412": "Motilal Oswal Financial Services Limited",
+                "07714": "SMC Global Securities Limited"
             }
         
         # Default MCX TM Code to TM Name mapping
@@ -2227,6 +2253,22 @@ class DataConfigPage(tk.Frame):
                 "TaxLotID": ""
             }
         
+        # Default ASIO SF4 Trading Code to Location Account Mapping
+        # Note: Use _get_location_account_from_trading_code() function in asio_sub_fund4.py to generate values dynamically
+        if dataset_name == "asio_sf4_trading_code_mapping":
+            return {
+                "FT": "Asio_Sub Fund_4_DBS_INR_8811210011631187",
+                "FT1": "Asio_Sub Fund_4_DBS_INR_8811210011631187_FT1",
+                "FT2": "Asio_Sub Fund_4_DBS_INR_8811210011631187_FT2"
+            }
+        
+        # Default ASIO Sub Fund 4 read configuration
+        if dataset_name == "asio_sub_fund4_read_config":
+            return {
+                "read_from_row": 1,
+                "read_from_column": "A"
+            }
+        
         return {}
 
     def _discover_datasets(self):
@@ -2242,7 +2284,7 @@ class DataConfigPage(tk.Frame):
                     # Add datasets from consolidated file
                 for dataset_name in ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
                                     "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_pricing_fno", "asio_pricing_mcx"]:
+                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_pricing_fno", "asio_pricing_mcx", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config"]:
                         if dataset_name in consolidated_data:
                             datasets[dataset_name] = consolidated_path
             
@@ -2262,7 +2304,7 @@ class DataConfigPage(tk.Frame):
         # Always include these datasets (loaded from consolidated_data.json or defaults)
         for dataset_name in ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
                             "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                            "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "asio_sf_2_mcx_future_security", "geneva_custodian_mapping"]:
+                            "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "asio_sf_2_mcx_future_security", "geneva_custodian_mapping", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config"]:
             if dataset_name not in datasets:
                 datasets[dataset_name] = consolidated_path  # All come from consolidated file
         

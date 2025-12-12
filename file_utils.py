@@ -1,6 +1,7 @@
 import os
 import json
 import sys
+import shutil
 
 def get_app_directory():
     """Get the application directory - works for both development and compiled EXE"""
@@ -12,9 +13,86 @@ def get_app_directory():
         return os.path.dirname(os.path.abspath(__file__))
 
 def ensure_consolidated_data_file():
-    """Ensure consolidated_data.json exists with default data"""
+    """Ensure consolidated_data.json exists with default data and ASIO Sub Fund 4 configurations"""
     app_dir = get_app_directory()
     consolidated_path = os.path.join(app_dir, "consolidated_data.json")
+    
+    # ASIO Sub Fund 4 default configurations
+    asio_sf4_configs = {
+        "asio_sf4_ft": {
+            "RecordType": "",
+            "RecordAction": "InsertUpdate",
+            "KeyValue": "",
+            "KeyValue.KeyName": "",
+            "UserTranId1": "",
+            "Portfolio": "ASIO - SF 4",
+            "LocationAccount": "",
+            "Strategy": "Default",
+            "Investment": "",
+            "Broker": "",
+            "EventDate": "",
+            "SettleDate": "",
+            "ActualSettleDate": "",
+            "Quantity": "",
+            "Price": "",
+            "PriceDenomination": "CALC",
+            "CounterInvestment": "INR",
+            "NetInvestmentAmount": "CALC",
+            "NetCounterAmount": "CALC",
+            "tradeFX": "",
+            "ContractFxRateNumerator": "",
+            "ContractFxRateDenominator": "",
+            "ContractFxRate": "",
+            "NotionalAmount": "",
+            "FundStructure": "ASIO-SF4",
+            "SpotDate": "",
+            "PriceDirectly": "",
+            "CounterFXDenomination": "CALC",
+            "CounterTDateFx": "",
+            "AccruedInterest": "",
+            "InvestmentAccruedInterest": "",
+            "Comments": "",
+            "TradeExpenses.ExpenseNumber": "",
+            "TradeExpenses.ExpenseCode": "",
+            "TradeExpenses.ExpenseAmt": "",
+            "TradeExpenses.ExpenseNumber1": "",
+            "TradeExpenses.ExpenseCode1": "",
+            "TradeExpenses.ExpenseAmt1": "",
+            "TradeExpenses.ExpenseNumber2": "",
+            "TradeExpenses.ExpenseCode2": "",
+            "TradeExpenses.ExpenseAmt2": "",
+            "NonCapExpenses.NonCapNumber": "",
+            "NonCapExpenses.NonCapExpenseCode": "",
+            "NonCapExpenses.NonCapAmount": "",
+            "NonCapExpenses.NonCapCurrency": "",
+            "NonCapExpenses.LocationAccount": "",
+            "NonCapExpenses.NonCapLiabilityCode": "",
+            "NonCapExpenses.NonCapPaymentType": "",
+            "NonCapExpenses.NonCapNumber1": "",
+            "NonCapExpenses.NonCapExpenseCode1": "",
+            "NonCapExpenses.NonCapAmount1": "",
+            "NonCapExpenses.NonCapCurrency1": "",
+            "NonCapExpenses.LocationAccount1": "",
+            "NonCapExpenses.NonCapLiabilityCode1": "",
+            "NonCapExpenses.NonCapPaymentType1": "",
+            "NonCapExpenses.NonCapNumber2": "",
+            "NonCapExpenses.NonCapExpenseCode2": "",
+            "NonCapExpenses.NonCapAmount2": "",
+            "NonCapExpenses.NonCapCurrency2": "",
+            "NonCapExpenses.LocationAccount2": "",
+            "NonCapExpenses.NonCapLiabilityCode2": "",
+            "NonCapExpenses.NonCapPaymentType2": ""
+        },
+        "asio_sf4_trading_code_mapping": {
+            "FT": "Asio_Sub Fund_4_DBS_INR_8811210011631187",
+            "FT1": "Asio_Sub Fund_4_DBS_INR_8811210011631187_FT1",
+            "FT2": "Asio_Sub Fund_4_DBS_INR_8811210011631187_FT2",
+        },
+        "asio_sub_fund4_read_config": {
+            "read_from_row": 1,
+            "read_from_column": "A"
+        }
+    }
     
     if not os.path.exists(consolidated_path):
         # Create default consolidated data
@@ -465,8 +543,73 @@ def ensure_consolidated_data_file():
             }
         }
         
+        # Add ASIO Sub Fund 4 configurations to default data
+        default_data.update(asio_sf4_configs)
+        
         # Save the default consolidated data file
-        with open(consolidated_path, "w") as f:
-            json.dump(default_data, f, indent=4)
+        try:
+            with open(consolidated_path, "w", encoding="utf-8") as f:
+                json.dump(default_data, f, indent=4, ensure_ascii=False)
+        except Exception as e:
+            # If there's an error creating the file, log but don't fail
+            # The app should still start even if config file creation fails
+            print(f"Warning: Could not create consolidated_data.json: {e}")
+    else:
+        # File exists - check and add ASIO Sub Fund 4 configurations if missing
+        try:
+            # Check if file is readable and not empty
+            if os.path.getsize(consolidated_path) == 0:
+                # File is empty, recreate with default data including ASIO SF4 configs
+                default_data = {}
+                default_data.update(asio_sf4_configs)
+                with open(consolidated_path, "w", encoding="utf-8") as f:
+                    json.dump(default_data, f, indent=4, ensure_ascii=False)
+            else:
+                # File exists and has content - read and update if needed
+                with open(consolidated_path, "r", encoding="utf-8") as f:
+                    consolidated_data = json.load(f)
+                
+                # Ensure consolidated_data is a dictionary
+                if not isinstance(consolidated_data, dict):
+                    # Invalid format, recreate with default data
+                    consolidated_data = {}
+                    consolidated_data.update(asio_sf4_configs)
+                    with open(consolidated_path, "w", encoding="utf-8") as f:
+                        json.dump(consolidated_data, f, indent=4, ensure_ascii=False)
+                else:
+                    # Check if asio_sf4_ft exists, if not add it
+                    updated = False
+                    for key, config in asio_sf4_configs.items():
+                        if key not in consolidated_data:
+                            consolidated_data[key] = config
+                            updated = True
+                    
+                    # Save updated data if changes were made
+                    if updated:
+                        with open(consolidated_path, "w", encoding="utf-8") as f:
+                            json.dump(consolidated_data, f, indent=4, ensure_ascii=False)
+        except json.JSONDecodeError as e:
+            # File exists but is corrupted/invalid JSON - backup and recreate
+            try:
+                # Try to backup corrupted file
+                backup_path = consolidated_path + ".backup"
+                if os.path.exists(consolidated_path):
+                    shutil.copy2(consolidated_path, backup_path)
+                
+                # Recreate with default data including ASIO SF4 configs
+                default_data = {}
+                default_data.update(asio_sf4_configs)
+                with open(consolidated_path, "w", encoding="utf-8") as f:
+                    json.dump(default_data, f, indent=4, ensure_ascii=False)
+                print(f"Warning: consolidated_data.json was corrupted. Recreated file. Backup saved as {backup_path}")
+            except Exception as backup_error:
+                print(f"Warning: Could not backup corrupted file: {backup_error}")
+        except PermissionError as e:
+            # Permission denied - log but don't fail
+            print(f"Warning: Permission denied accessing consolidated_data.json: {e}")
+        except Exception as e:
+            # Any other error reading/updating - log but don't fail
+            # The app should still start even if config update fails
+            print(f"Warning: Could not update consolidated_data.json: {e}")
     
     return consolidated_path

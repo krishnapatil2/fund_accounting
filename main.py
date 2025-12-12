@@ -1,7 +1,7 @@
 import tkinter as tk
 import sys
 import os
-from pages import dashboard, settings, alpha_report, dataconfig, asio_reconciliation, fo_reconciliation, excel_merger, asio_trade_loader, asio_trade_loader_mcx, fno_mcx_price_recon_loader
+from pages import dashboard, settings, alpha_report, dataconfig, asio_reconciliation, fo_reconciliation, excel_merger, asio_trade_loader, asio_trade_loader_mcx, fno_mcx_price_recon_loader, asio_sub_fund4
 from PIL import Image, ImageTk  # for better image support
 from file_utils import ensure_consolidated_data_file
 
@@ -20,6 +20,7 @@ MENU_STRUCTURE = {
         "ASIO Reconciliation": asio_reconciliation.ASIOReconciliationPage,
         "ASIO Sub Fund 2 Trade Loader FNO": asio_trade_loader.ASIOTradeLoaderPage,
         "ASIO Sub Fund 2 Trade Loader MCX": asio_trade_loader_mcx.ASIOTradeLoaderMCXPage,
+        "ASIO Sub Fund 4": asio_sub_fund4.ASIOSubFund4Page,
         "Daily F&O Reconciliation": fo_reconciliation.FOReconciliationPage,
         "FNO and MCX Price Recon & Loader": fno_mcx_price_recon_loader.FNOMCXPriceReconLoaderPage,
         "Excel Merger": excel_merger.ExcelMergerPage,

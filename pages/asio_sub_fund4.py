@@ -7,6 +7,9 @@ import json
 import pandas as pd
 from collections import defaultdict
 import threading
+import csv
+import io
+import zipfile
 
 from my_app.pages.loading import LoadingSpinner
 from my_app.pages.helper import output_save_in_template, multiple_excels_to_zip
@@ -161,7 +164,23 @@ class ASIOSubFund4Page(tk.Frame):
             font=("Arial", 11, "bold"),
             cursor="hand2"
         )
-        remove_btn.pack(side="left")
+        remove_btn.pack(side="left", padx=(0, 10))
+
+        remove_all_btn = tk.Button(
+            file_buttons_frame,
+            text="🗑️ Remove All",
+            command=self._remove_all_files,
+            bg="#c0392b",
+            fg="white",
+            activebackground="#a93226",
+            activeforeground="white",
+            relief="flat",
+            padx=20,
+            pady=8,
+            font=("Arial", 11, "bold"),
+            cursor="hand2"
+        )
+        remove_all_btn.pack(side="left")
 
         # Store selected files
         self.selected_files = []
@@ -359,6 +378,67 @@ class ASIOSubFund4Page(tk.Frame):
         read_row_entry.config(validate="key", validatecommand=(self.register(self._validate_number), "%P"))
         read_col_entry.config(validate="key", validatecommand=(self.register(self._validate_column_letter), "%P"))
 
+        # File Reading Fallback checkbox
+        fallback_frame = tk.Frame(main_container, bg="#ffffff")
+        fallback_frame.pack(fill="x", pady=(15, 0))
+        
+        self.fallback_var = tk.BooleanVar(value=False)
+        fallback_checkbox = tk.Checkbutton(
+            fallback_frame,
+            text="File Reading Fallback (Row 10, Column B)",
+            variable=self.fallback_var,
+            font=("Arial", 11),
+            bg="#ffffff",
+            fg="#34495e",
+            activebackground="#ffffff",
+            activeforeground="#34495e",
+            selectcolor="#ffffff",
+            cursor="hand2"
+        )
+        fallback_checkbox.pack(side="left")
+
+        # Output Format checkboxes
+        output_format_frame = tk.Frame(main_container, bg="#ffffff")
+        output_format_frame.pack(fill="x", pady=(15, 0))
+        
+        tk.Label(
+            output_format_frame,
+            text="Output Format:",
+            font=("Arial", 11, "bold"),
+            bg="#ffffff",
+            fg="#34495e"
+        ).pack(side="left", padx=(0, 15))
+        
+        self.export_excel_var = tk.BooleanVar(value=True)
+        excel_checkbox = tk.Checkbutton(
+            output_format_frame,
+            text="Excel (.xlsx)",
+            variable=self.export_excel_var,
+            font=("Arial", 11),
+            bg="#ffffff",
+            fg="#34495e",
+            activebackground="#ffffff",
+            activeforeground="#34495e",
+            selectcolor="#ffffff",
+            cursor="hand2"
+        )
+        excel_checkbox.pack(side="left", padx=(0, 15))
+        
+        self.export_csv_var = tk.BooleanVar(value=False)
+        csv_checkbox = tk.Checkbutton(
+            output_format_frame,
+            text="CSV (.csv)",
+            variable=self.export_csv_var,
+            font=("Arial", 11),
+            bg="#ffffff",
+            fg="#34495e",
+            activebackground="#ffffff",
+            activeforeground="#34495e",
+            selectcolor="#ffffff",
+            cursor="hand2"
+        )
+        csv_checkbox.pack(side="left")
+
         # Divider line before submit
         divider3 = tk.Frame(main_container, bg="#e0e0e0", height=1)
         divider3.pack(fill="x", pady=(0, 25))
@@ -479,6 +559,20 @@ class ASIOSubFund4Page(tk.Frame):
             self.status_var.set(f"{len(self.selected_files)} file(s) remaining")
         else:
             messagebox.showinfo("Info", "Please select a file to remove")
+
+    def _remove_all_files(self):
+        """Remove all files from list."""
+        if not self.selected_files:
+            messagebox.showinfo("Info", "No files to remove")
+            return
+        
+        # Clear the listbox
+        self.file_listbox.delete(0, tk.END)
+        
+        # Clear the selected files list
+        self.selected_files.clear()
+        
+        self.status_var.set("All files removed")
 
     def _validate_number(self, value):
         """Validate that input is a positive integer."""
@@ -947,35 +1041,43 @@ class ASIOSubFund4Page(tk.Frame):
             return
 
         # Validate row and column inputs
-        try:
-            read_row = int(self.read_row_var.get())
-            
-            if read_row < 1:
-                messagebox.showwarning("Warning", "Read From Row must be at least 1")
-                return
-            
-            # Convert column letter to index
-            column_letter = self.read_col_var.get().strip().upper()
-            if not column_letter:
-                messagebox.showwarning("Warning", "Please enter a valid column letter (A, B, C, etc.)")
-                return
-            
+        # Check if fallback checkbox is checked
+        if self.fallback_var.get():
+            # Use fallback values: Row 10, Column B
+            read_row = 10
+            column_letter = "B"
             read_col = self._column_letter_to_index(column_letter)
-            
-            if read_col < 0:
-                messagebox.showwarning("Warning", "Invalid column letter. Please use A-Z or AA-ZZ format.")
+        else:
+            # Use values from input fields
+            try:
+                read_row = int(self.read_row_var.get())
+                
+                if read_row < 1:
+                    messagebox.showwarning("Warning", "Read From Row must be at least 1")
+                    return
+                
+                # Convert column letter to index
+                column_letter = self.read_col_var.get().strip().upper()
+                if not column_letter:
+                    messagebox.showwarning("Warning", "Please enter a valid column letter (A, B, C, etc.)")
+                    return
+                
+                read_col = self._column_letter_to_index(column_letter)
+                
+                if read_col < 0:
+                    messagebox.showwarning("Warning", "Invalid column letter. Please use A-Z or AA-ZZ format.")
+                    return
+                
+                # Save read configuration for next time (only if not using fallback)
+                self._save_read_config(read_row, column_letter)
+            except ValueError:
+                messagebox.showerror("Error", "Read From Row must be a valid number")
+                self.status_var.set("Error: Invalid row value")
                 return
-            
-            # Save read configuration for next time
-            self._save_read_config(read_row, column_letter)
-        except ValueError:
-            messagebox.showerror("Error", "Read From Row must be a valid number")
-            self.status_var.set("Error: Invalid row value")
-            return
-        except Exception as e:
-            messagebox.showerror("Error", f"Invalid column input: {str(e)}")
-            self.status_var.set("Error: Invalid column value")
-            return
+            except Exception as e:
+                messagebox.showerror("Error", f"Invalid column input: {str(e)}")
+                self.status_var.set("Error: Invalid column value")
+                return
 
         # Process the submission
         self.status_var.set("Processing... Please wait")
@@ -1068,15 +1170,31 @@ class ASIOSubFund4Page(tk.Frame):
             messagebox.showinfo("Nothing to export", "Process files first to generate template data.")
             return
         
+        # Get event date for filename
+        try:
+            event_date = self.event_date_entry.get_date()
+            # Format date as DDMMYYYY for filename
+            event_date_str = event_date.strftime("%d%m%Y")
+        except Exception:
+            # If event date is not available, use current date or default
+            from datetime import datetime
+            event_date_str = datetime.now().strftime("%d%m%Y")
+        
         # Ask output path for zip file
+        zip_filename = f"ASIO_Sub_Fund_4_FT_Trades_{event_date_str}.zip"
         out_path = filedialog.asksaveasfilename(
             title="Save Template Data",
             defaultextension=".zip",
             filetypes=[["ZIP Files", "*.zip"]],
-            initialfile="ASIO_Sub_Fund_4_Template.zip"
+            initialfile=zip_filename
         )
         if not out_path:
             self.status_var.set("Export cancelled by user")
+            return
+        
+        # Validate output format selection
+        if not self.export_excel_var.get() and not self.export_csv_var.get():
+            messagebox.showwarning("Warning", "Please select at least one output format (Excel or CSV).")
             return
         
         # Show spinner (non-blocking)
@@ -1085,8 +1203,9 @@ class ASIOSubFund4Page(tk.Frame):
         def task():
             try:
                 excel_files = []
+                csv_files = []
                 
-                # Create one Excel file for each trading code
+                # Create files for each trading code
                 for trading_code, data_list in sorted(self.loader_data.items()):
                     if not data_list:
                         continue
@@ -1103,29 +1222,71 @@ class ASIOSubFund4Page(tk.Frame):
                                 row_dict[header] = ''
                         template_data_dicts.append(row_dict)
                     
-                    # Create Excel file using helper function
-                    if template_data_dicts:
-                        template_filename = f"ASIO_SF4_{trading_code}_Template.xlsx"
+                    if not template_data_dicts:
+                        continue
+                    
+                    # Create Excel file if Excel format is selected
+                    if self.export_excel_var.get():
+                        excel_filename = f"ASIO_SF4_{trading_code}_{event_date_str}.xlsx"
                         excel_file, excel_name = output_save_in_template(
                             template_data_dicts,
                             sub_fund_4_headers,
-                            template_filename
+                            excel_filename
                         )
                         excel_files.append((excel_file, excel_name))
+                    
+                    # Create CSV file if CSV format is selected
+                    if self.export_csv_var.get():
+                        csv_filename = f"ASIO_SF4_{trading_code}_{event_date_str}.csv"
+                        # Create CSV in memory
+                        csv_buffer = io.StringIO()
+                        csv_writer = csv.DictWriter(csv_buffer, fieldnames=sub_fund_4_headers)
+                        csv_writer.writeheader()
+                        csv_writer.writerows(template_data_dicts)
+                        csv_content = csv_buffer.getvalue()
+                        csv_buffer.close()
+                        
+                        # Convert to bytes
+                        csv_bytes = io.BytesIO(csv_content.encode('utf-8'))
+                        csv_files.append((csv_bytes, csv_filename))
                 
-                if not excel_files:
+                if not excel_files and not csv_files:
                     loader.close()
                     messagebox.showwarning("Warning", "No template data to export.")
                     return
                 
-                # Create zip file
-                zip_buffer = multiple_excels_to_zip(excel_files, "ASIO_Sub_Fund_4_Template.zip")
+                # Create zip file with all files
+                zip_buffer = io.BytesIO()
+                with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                    # Add Excel files
+                    for excel_file, excel_name in excel_files:
+                        excel_file.seek(0)
+                        zip_file.writestr(excel_name, excel_file.read())
+                    
+                    # Add CSV files
+                    for csv_file, csv_name in csv_files:
+                        csv_file.seek(0)
+                        zip_file.writestr(csv_name, csv_file.read())
                 
                 # Save zip file
+                zip_buffer.seek(0)
                 with open(out_path, 'wb') as f:
                     f.write(zip_buffer.read())
                 
-                file_list = [name for _, name in excel_files]
+                # Close all file buffers
+                for excel_file, _ in excel_files:
+                    excel_file.close()
+                for csv_file, _ in csv_files:
+                    csv_file.close()
+                zip_buffer.close()
+                
+                # Create file list for message
+                file_list = []
+                if excel_files:
+                    file_list.extend([name for _, name in excel_files])
+                if csv_files:
+                    file_list.extend([name for _, name in csv_files])
+                
                 loader.close()
                 messagebox.showinfo(
                     "Success", 

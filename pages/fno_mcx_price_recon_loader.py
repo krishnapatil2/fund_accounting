@@ -392,7 +392,7 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
             
             # Filter LPA data based on selected segment
             mcx_group2_filters = ['Commodity Future Option', 'Commodity Option','Commodity Future']
-            fno_group2_filters = ['Equity Option', 'Index Option']
+            fno_group2_filters = ['Equity Option', 'Index Option','Index Future']
             
             # Filter based on selected segment (don't combine - process only selected segment)
             if segment == 'MCX':
@@ -515,7 +515,6 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
                 contract_settlement_price = row['ContractSettlementPrice']
 
                 security_code = create_security_code(row, exchange_prefix)
-
                 if not security_code:
                     continue
                 net_qty = int(net_buy) - int(net_sell)
@@ -524,6 +523,9 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
                     holding_dict[security_code] += net_qty
                 else:
                     holding_dict[security_code] = net_qty
+                
+                # if option_type == "FF":
+                #     breakpoint()
                 
                 # Store ContractSettlementPrice (use the last value if multiple rows have same security_code)
                 # Convert to Decimal for exact precision
@@ -559,6 +561,9 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
                     'Type': lpa_type
                 })
                 
+                # if invest_code == "NSENIFTY20251230F0":
+                #     breakpoint()
+                
                 # Build template_data row with pricing headers
                 row = []
                 # Access pricing data based on segment
@@ -578,6 +583,7 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
                                 else:
                                     row.append('')
                             elif header == INVESTMENT:
+                                print("invest_code", invest_code)
                                 row.append(invest_code)
                             elif header == PRICE:
                                 # Use ContractSettlementPrice from holding_price_dict
