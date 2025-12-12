@@ -1,0 +1,1143 @@
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+from tkcalendar import DateEntry
+from datetime import datetime
+import os
+import json
+import pandas as pd
+from collections import defaultdict
+import threading
+
+from my_app.pages.loading import LoadingSpinner
+from my_app.pages.helper import output_save_in_template, multiple_excels_to_zip
+
+from my_app.CONSTANTS import (
+    RECORDTYPE, TradeQuantity, sub_fund_4_headers, keep_blank_for_headers,
+    RECORDACTION, USERTRANID1, PORTFOLIO, STRATEGY, PRICEDENOMINATION,
+    COUNTERINVESTMENT, NETINVESTMENTAMOUNT, NETCOUNTERAMOUNT, FUNDSTRUCTURE,
+    PRICEDIRECTLY, COUNTERFXDENOMINATION, QUANTITY, PRICE, EVENTDATE, SETTLEDATE, ACTUALSETTLEDATE
+)
+from CONSTANTS import BROKER, KEYVALUE, KEYVALUE_KEYNAME, LOCATIONACCOUNT, BuySellIndicator, TradingCode
+from CONSTANTS import INVESTMENT
+
+class ASIOSubFund4Page(tk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent, bg="#ffffff")
+
+        # Title (fixed at top)
+        title_frame = tk.Frame(self, bg="#ffffff")
+        title_frame.pack(fill="x", pady=(15, 0))
+        
+        title = tk.Label(
+            title_frame, 
+            text="📑 ASIO Sub Fund 4", 
+            font=("Arial", 22, "bold"), 
+            bg="#ffffff", 
+            fg="#2c3e50"
+        )
+        title.pack(pady=(0, 20))
+
+        # Create canvas for scrolling (no visible scrollbar)
+        canvas_frame = tk.Frame(self, bg="#ffffff")
+        canvas_frame.pack(fill="both", expand=True, padx=0, pady=0)
+        
+        # Canvas for scrolling
+        self.canvas = tk.Canvas(
+            canvas_frame,
+            bg="#ffffff",
+            highlightthickness=0,
+            borderwidth=0
+        )
+        
+        # Scrollable frame inside canvas
+        self.scrollable_frame = tk.Frame(self.canvas, bg="#ffffff")
+        
+        # Configure canvas scrolling
+        self.scrollable_frame.bind(
+            "<Configure>",
+            lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+        )
+        
+        # Create window in canvas for scrollable frame
+        self.canvas_window = self.canvas.create_window(
+            (0, 0),
+            window=self.scrollable_frame,
+            anchor="nw"
+        )
+        
+        # Bind canvas resize to update scrollable frame width
+        self.canvas.bind("<Configure>", self._on_canvas_configure)
+        
+        # Pack canvas (no scrollbar - completely hidden)
+        self.canvas.pack(side="left", fill="both", expand=True)
+        
+        # Bind mouse wheel for scrolling
+        self._bind_mousewheel()
+        
+        # Main container inside scrollable frame
+        main_container = tk.Frame(self.scrollable_frame, bg="#ffffff")
+        main_container.pack(fill="x", padx=40, pady=20)
+
+        # ========== File Upload ==========
+        # Section title with subtle styling
+        file_title = tk.Label(
+            main_container,
+            text="📁 File Upload",
+            font=("Arial", 14, "bold"),
+            bg="#ffffff",
+            fg="#2c3e50",
+            anchor="w"
+        )
+        file_title.pack(fill="x", pady=(0, 15))
+
+        # ListBox container
+        listbox_container = tk.Frame(main_container, bg="#ffffff")
+        listbox_container.pack(fill="x", pady=(0, 12))
+
+        listbox_label = tk.Label(
+            listbox_container,
+            text="Selected Files:",
+            font=("Arial", 11, "bold"),
+            bg="#ffffff",
+            fg="#2c3e50",
+            anchor="w"
+        )
+        listbox_label.pack(fill="x", pady=(0, 8))
+
+        # ListBox with scrollbar
+        listbox_frame = tk.Frame(listbox_container, bg="#ecf0f1", relief="flat", bd=1)
+        listbox_frame.pack(fill="x")
+
+        scrollbar = tk.Scrollbar(listbox_frame, orient="vertical")
+        scrollbar.pack(side="right", fill="y")
+
+        self.file_listbox = tk.Listbox(
+            listbox_frame,
+            yscrollcommand=scrollbar.set,
+            font=("Arial", 10),
+            bg="white",
+            fg="#2c3e50",
+            selectmode=tk.SINGLE,
+            height=5,
+            relief="flat",
+            bd=0,
+            highlightthickness=1,
+            highlightbackground="#bdc3c7"
+        )
+        self.file_listbox.pack(side="left", fill="both", expand=True, padx=1, pady=1)
+        scrollbar.config(command=self.file_listbox.yview)
+
+        # Button group for file actions (Browse and Remove together)
+        file_buttons_frame = tk.Frame(main_container, bg="#ffffff")
+        file_buttons_frame.pack(fill="x", pady=(12, 0))
+
+        browse_btn = tk.Button(
+            file_buttons_frame,
+            text="📁 Browse File",
+            command=self._browse_files,
+            bg="#3498db",
+            fg="white",
+            activebackground="#2980b9",
+            activeforeground="white",
+            relief="flat",
+            padx=20,
+            pady=8,
+            font=("Arial", 11, "bold"),
+            cursor="hand2"
+        )
+        browse_btn.pack(side="left", padx=(0, 10))
+
+        remove_btn = tk.Button(
+            file_buttons_frame,
+            text="🗑️ Remove Selected",
+            command=self._remove_selected_file,
+            bg="#e74c3c",
+            fg="white",
+            activebackground="#c0392b",
+            activeforeground="white",
+            relief="flat",
+            padx=20,
+            pady=8,
+            font=("Arial", 11, "bold"),
+            cursor="hand2"
+        )
+        remove_btn.pack(side="left")
+
+        # Store selected files
+        self.selected_files = []
+        
+        # Store loader data for export
+        self.loader_data = defaultdict(list)
+
+        # Divider line
+        divider1 = tk.Frame(main_container, bg="#e0e0e0", height=1)
+        divider1.pack(fill="x", pady=(25, 25))
+
+        # ========== Date Input ==========
+        date_title = tk.Label(
+            main_container,
+            text="📅 Date Selection",
+            font=("Arial", 14, "bold"),
+            bg="#ffffff",
+            fg="#2c3e50",
+            anchor="w"
+        )
+        date_title.pack(fill="x", pady=(0, 15))
+
+        # Date fields row
+        date_row = tk.Frame(main_container, bg="#ffffff")
+        date_row.pack(fill="x", pady=(0, 25))
+
+        # Event Date
+        event_date_frame = tk.Frame(date_row, bg="#ffffff")
+        event_date_frame.pack(side="left", padx=(0, 30))
+        tk.Label(
+            event_date_frame,
+            text="Event Date",
+            font=("Arial", 11, "bold"),
+            bg="#ffffff",
+            fg="#34495e"
+        ).pack(side="top", pady=(0, 8))
+        self.event_date_entry = DateEntry(
+            event_date_frame,
+            width=18,
+            background="#3498db",
+            foreground="white",
+            borderwidth=2,
+            date_pattern='dd/MM/yyyy',
+            font=("Arial", 10)
+        )
+        self.event_date_entry.pack(side="top")
+        
+        # Hook into the calendar selection by overriding the _select_calendar method
+        # Store original method if it exists
+        original_select = getattr(self.event_date_entry, '_select_calendar', None)
+        
+        def wrapped_select(sel_date):
+            # Call original method if it exists
+            if original_select:
+                original_select(sel_date)
+            # Update other dates
+            self._on_event_date_change()
+        
+        # Replace the method
+        self.event_date_entry._select_calendar = wrapped_select
+        
+        # Also bind to focus out event as backup (when user types date manually)
+        self.event_date_entry.bind("<FocusOut>", lambda e: self._on_event_date_change())
+        
+        # Try to access and bind to the calendar widget directly
+        self.after(100, self._setup_calendar_binding)
+
+        # Settlement Date
+        settlement_date_frame = tk.Frame(date_row, bg="#ffffff")
+        settlement_date_frame.pack(side="left", padx=(0, 30))
+        tk.Label(
+            settlement_date_frame,
+            text="Settlement Date",
+            font=("Arial", 11, "bold"),
+            bg="#ffffff",
+            fg="#34495e"
+        ).pack(side="top", pady=(0, 8))
+        self.settlement_date_entry = DateEntry(
+            settlement_date_frame,
+            width=18,
+            background="#3498db",
+            foreground="white",
+            borderwidth=2,
+            date_pattern='dd/MM/yyyy',
+            font=("Arial", 10)
+        )
+        self.settlement_date_entry.pack(side="top")
+
+        # Actual Date
+        actual_date_frame = tk.Frame(date_row, bg="#ffffff")
+        actual_date_frame.pack(side="left")
+        tk.Label(
+            actual_date_frame,
+            text="Actual Date",
+            font=("Arial", 11, "bold"),
+            bg="#ffffff",
+            fg="#34495e"
+        ).pack(side="top", pady=(0, 8))
+        self.actual_date_entry = DateEntry(
+            actual_date_frame,
+            width=18,
+            background="#3498db",
+            foreground="white",
+            borderwidth=2,
+            date_pattern='dd/MM/yyyy',
+            font=("Arial", 10)
+        )
+        self.actual_date_entry.pack(side="top")
+
+        # Divider line
+        divider2 = tk.Frame(main_container, bg="#e0e0e0", height=1)
+        divider2.pack(fill="x", pady=(0, 25))
+
+        # ========== File Reading ==========
+        reading_title = tk.Label(
+            main_container,
+            text="⚙️ File Reading Configuration",
+            font=("Arial", 14, "bold"),
+            bg="#ffffff",
+            fg="#2c3e50",
+            anchor="w"
+        )
+        reading_title.pack(fill="x", pady=(0, 15))
+
+        # Number inputs row
+        reading_row = tk.Frame(main_container, bg="#ffffff")
+        reading_row.pack(fill="x", pady=(0, 25))
+
+        # Read From Row
+        read_row_frame = tk.Frame(reading_row, bg="#ffffff")
+        read_row_frame.pack(side="left", padx=(0, 40))
+        tk.Label(
+            read_row_frame,
+            text="Read From Row",
+            font=("Arial", 11, "bold"),
+            bg="#ffffff",
+            fg="#34495e"
+        ).pack(side="top", pady=(0, 8))
+        # Load saved read configuration
+        read_config = self._load_read_config()
+        default_read_row = str(read_config.get("read_from_row", 1))
+        default_read_col = read_config.get("read_from_column", "A")
+        
+        self.read_row_var = tk.StringVar(value=default_read_row)
+        read_row_entry = tk.Entry(
+            read_row_frame,
+            textvariable=self.read_row_var,
+            width=15,
+            font=("Arial", 11),
+            justify="center",
+            relief="solid",
+            bd=1,
+            highlightthickness=1,
+            highlightbackground="#bdc3c7",
+            highlightcolor="#3498db"
+        )
+        read_row_entry.pack(side="top")
+
+        # Read From Column (A, B, C format)
+        read_col_frame = tk.Frame(reading_row, bg="#ffffff")
+        read_col_frame.pack(side="left")
+        tk.Label(
+            read_col_frame,
+            text="Read From Column",
+            font=("Arial", 11, "bold"),
+            bg="#ffffff",
+            fg="#34495e"
+        ).pack(side="top", pady=(0, 8))
+        self.read_col_var = tk.StringVar(value=default_read_col)
+        read_col_entry = tk.Entry(
+            read_col_frame,
+            textvariable=self.read_col_var,
+            width=15,
+            font=("Arial", 11, "bold"),
+            justify="center",
+            relief="solid",
+            bd=1,
+            highlightthickness=1,
+            highlightbackground="#bdc3c7",
+            highlightcolor="#3498db"
+        )
+        read_col_entry.pack(side="top")
+        
+        # Bind to uppercase and validate column letters
+        def on_col_change(*args):
+            current = self.read_col_var.get()
+            # Convert to uppercase
+            upper = current.upper()
+            if upper != current:
+                self.read_col_var.set(upper)
+        
+        self.read_col_var.trace_add("write", on_col_change)
+
+        # Validation for inputs
+        read_row_entry.config(validate="key", validatecommand=(self.register(self._validate_number), "%P"))
+        read_col_entry.config(validate="key", validatecommand=(self.register(self._validate_column_letter), "%P"))
+
+        # Divider line before submit
+        divider3 = tk.Frame(main_container, bg="#e0e0e0", height=1)
+        divider3.pack(fill="x", pady=(0, 25))
+
+        # ========== Submit Button Section ==========
+        submit_section = tk.Frame(main_container, bg="#ffffff")
+        submit_section.pack(fill="x", pady=(0, 15))
+
+        # Submit button with hover effect - centered and prominent
+        submit_btn = tk.Button(
+            submit_section,
+            text="✓ Submit",
+            command=self._submit,
+            bg="#27ae60",
+            fg="white",
+            activebackground="#229954",
+            activeforeground="white",
+            relief="flat",
+            padx=50,
+            pady=14,
+            font=("Arial", 14, "bold"),
+            cursor="hand2"
+        )
+        submit_btn.pack()
+        
+        # Add hover effect
+        def on_enter(e):
+            submit_btn.config(bg="#229954")
+        
+        def on_leave(e):
+            submit_btn.config(bg="#27ae60")
+        
+        submit_btn.bind("<Enter>", on_enter)
+        submit_btn.bind("<Leave>", on_leave)
+
+        # Status bar
+        self.status_var = tk.StringVar(value="Ready - Please select files and configure settings")
+        status_label = tk.Label(
+            main_container,
+            textvariable=self.status_var,
+            font=("Arial", 10),
+            bg="#f8f9fa",
+            fg="#6c757d",
+            anchor="w",
+            relief="flat",
+            bd=0,
+            padx=15,
+            pady=10
+        )
+        status_label.pack(fill="x", pady=(0, 20))
+    
+    def _on_canvas_configure(self, event):
+        """Update scrollable frame width when canvas is resized."""
+        canvas_width = event.width
+        self.canvas.itemconfig(self.canvas_window, width=canvas_width)
+    
+    def _bind_mousewheel(self):
+        """Bind mouse wheel events for scrolling."""
+        def _on_mousewheel(event):
+            try:
+                # Check if canvas still exists before scrolling
+                if hasattr(self, 'canvas') and self.canvas.winfo_exists():
+                    self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+            except Exception:
+                pass  # Ignore errors if canvas is destroyed
+        
+        def _bind_to_mousewheel(event):
+            try:
+                if hasattr(self, 'canvas') and self.canvas.winfo_exists():
+                    self.canvas.bind_all("<MouseWheel>", _on_mousewheel)
+            except Exception:
+                pass
+        
+        def _unbind_from_mousewheel(event):
+            try:
+                if hasattr(self, 'canvas') and self.canvas.winfo_exists():
+                    self.canvas.unbind_all("<MouseWheel>")
+            except Exception:
+                pass
+        
+        # Bind mousewheel when mouse enters canvas (with safety check)
+        try:
+            if hasattr(self, 'canvas') and self.canvas.winfo_exists():
+                self.canvas.bind("<Enter>", _bind_to_mousewheel)
+                self.canvas.bind("<Leave>", _unbind_from_mousewheel)
+        except Exception:
+            pass
+
+    def _browse_files(self):
+        """Browse and select xls, xlsx, csv files."""
+        files = filedialog.askopenfilenames(
+            title="Select Files",
+            filetypes=[
+                ("All Supported Files", "*.xls *.xlsx *.csv"),
+                ("Excel Files", "*.xls *.xlsx"),
+                ("CSV Files", "*.csv"),
+                ("All Files", "*.*")
+            ]
+        )
+
+        if files:
+            for file_path in files:
+                if file_path not in self.selected_files:
+                    self.selected_files.append(file_path)
+                    # Display only filename in ListBox
+                    filename = os.path.basename(file_path)
+                    self.file_listbox.insert(tk.END, filename)
+            
+            self.status_var.set(f"{len(self.selected_files)} file(s) selected")
+
+    def _remove_selected_file(self):
+        """Remove selected file from list."""
+        selection = self.file_listbox.curselection()
+        if selection:
+            index = selection[0]
+            self.file_listbox.delete(index)
+            self.selected_files.pop(index)
+            self.status_var.set(f"{len(self.selected_files)} file(s) remaining")
+        else:
+            messagebox.showinfo("Info", "Please select a file to remove")
+
+    def _validate_number(self, value):
+        """Validate that input is a positive integer."""
+        if value == "":
+            return True
+        try:
+            int(value)
+            return True
+        except ValueError:
+            return False
+    
+    def _validate_column_letter(self, value):
+        """Validate that input is a valid column letter (A-Z, AA-ZZ, etc.)."""
+        if value == "":
+            return True
+        # Convert to uppercase for validation
+        upper_value = value.upper()
+        # Allow only letters A-Z (single or double letter columns like AA, AB, etc.)
+        if len(upper_value) <= 2 and upper_value.isalpha():
+            return True
+        return False
+    
+    def _on_event_date_change(self, event=None):
+        """Update Settlement Date and Actual Date to match Event Date when Event Date changes.
+        This only works one-way: Event Date -> Settlement Date and Actual Date.
+        Changes to Settlement Date or Actual Date do not affect Event Date.
+        """
+        try:
+            # Get the selected date from Event Date
+            event_date = self.event_date_entry.get_date()
+            
+            # Only update if we have a valid date
+            if event_date:
+                # Update Settlement Date and Actual Date to match Event Date
+                self.settlement_date_entry.set_date(event_date)
+                self.actual_date_entry.set_date(event_date)
+        except Exception:
+            # Silently ignore errors (e.g., if dates are not yet initialized)
+            pass
+    
+    def _setup_calendar_binding(self):
+        """Set up binding to the calendar widget after it's created."""
+        try:
+            # Access the calendar widget if it exists
+            if hasattr(self.event_date_entry, '_top_cal') and self.event_date_entry._top_cal:
+                # Bind to calendar date selection
+                self.event_date_entry._top_cal.bind("<<CalendarSelected>>", 
+                                                    lambda e: self._on_event_date_change())
+        except Exception:
+            pass
+    
+    def _load_read_config(self):
+        """Load read configuration from consolidated_data.json."""
+        try:
+            from my_app.file_utils import get_app_directory
+            app_dir = get_app_directory()
+            consolidated_path = os.path.join(app_dir, "consolidated_data.json")
+            
+            if os.path.exists(consolidated_path):
+                with open(consolidated_path, "r", encoding="utf-8") as f:
+                    consolidated_data = json.load(f)
+                    read_config = consolidated_data.get("asio_sub_fund4_read_config", {})
+                    return read_config
+        except Exception:
+            pass
+        
+        # Return default if loading fails
+        return {"read_from_row": 1, "read_from_column": "A"}
+    
+    def _save_read_config(self, read_row, read_col_letter):
+        """Save read configuration to consolidated_data.json."""
+        try:
+            from my_app.file_utils import get_app_directory
+            app_dir = get_app_directory()
+            consolidated_path = os.path.join(app_dir, "consolidated_data.json")
+            
+            # Load existing data
+            consolidated_data = {}
+            if os.path.exists(consolidated_path):
+                with open(consolidated_path, "r", encoding="utf-8") as f:
+                    consolidated_data = json.load(f)
+            
+            # Update read config
+            consolidated_data["asio_sub_fund4_read_config"] = {
+                "read_from_row": read_row,
+                "read_from_column": read_col_letter
+            }
+            
+            # Save back to file
+            with open(consolidated_path, "w", encoding="utf-8") as f:
+                json.dump(consolidated_data, f, indent=4)
+        except Exception as e:
+            # Silently fail - don't interrupt user workflow
+            pass
+    
+    def _column_letter_to_index(self, column_letter):
+        """Convert Excel column letter (A, B, C, ..., Z, AA, AB, etc.) to 0-based index.
+        
+        Args:
+            column_letter: Column letter string (e.g., "A", "B", "AA")
+        
+        Returns:
+            int: 0-based column index (A=0, B=1, Z=25, AA=26, etc.)
+        """
+        if not column_letter:
+            return 0
+        
+        column_letter = column_letter.upper().strip()
+        result = 0
+        for char in column_letter:
+            result = result * 26 + (ord(char) - ord('A') + 1)
+        return result - 1  # Convert to 0-based index
+    
+    def read_dynamic_file(
+            self,
+            file_path: str,
+            header_row: int = 1,
+            header_start_col: int = 0,
+            sheet_name: int | str | None = 0,
+            **kwargs
+        ):
+        """
+        Dynamic function to read CSV, XLS, and XLSX files with configurable header row and header start column.
+        
+        Args:
+            file_path (str): Path to the file (CSV, XLS, or XLSX)
+            header_row (int): Row number where header is located (1-based, Excel row number).
+                            For example, header_row=10 means header is at row 10 in Excel.
+            header_start_col (int): Column index where headers start (0-based, 0=A, 1=B, 2=C, etc.).
+                                  For example, header_start_col=1 means headers start from column B.
+            sheet_name (int | str | None): Sheet name or index for Excel files (default: 0 for first sheet)
+            **kwargs: Additional pandas read_* options (usecols, dtype, parse_dates, etc.)
+        
+        Returns:
+            pd.DataFrame: DataFrame with headers from specified row and column
+        """
+        from pathlib import Path
+        import pandas as pd
+        
+        file_path = Path(file_path)
+        
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+        
+        # Get file extension
+        ext = file_path.suffix.lower()
+        
+        # Convert header_row (1-based) to 0-based index for pandas
+        # If header_row=10 (1-based), then header_row_index=9 (0-based)
+        header_row_index = header_row - 1
+        
+        # Skip rows before the header row
+        skiprows = list(range(header_row_index)) if header_row_index > 0 else None
+        
+        # For CSV, XLS, XLSX - handle column selection
+        if ext == ".csv":
+            # Read CSV with header at specified row and columns from header_start_col onwards
+            df = pd.read_csv(
+                file_path,
+                header=0,  # After skipping, header is at row 0
+                skiprows=skiprows,
+                usecols=range(header_start_col, 10_000) if header_start_col > 0 else None,
+                **kwargs
+            )
+            
+        elif ext in [".xls", ".xlsx"]:
+            # Determine engine for Excel files
+            engine = "openpyxl" if ext == ".xlsx" else "xlrd"
+            
+            # Read Excel file with skiprows and header
+            # After skipping rows, the header row becomes row 0
+            df = pd.read_excel(
+                file_path,
+                sheet_name=sheet_name,
+                header=0,  # After skipping, header is at row 0
+                skiprows=skiprows,
+                engine=engine,
+                **kwargs
+            )
+            
+            # If header_start_col > 0, select columns starting from that index
+            if header_start_col > 0:
+                # Select columns from header_start_col onwards (drop columns before it)
+                df = df.iloc[:, header_start_col:]
+            
+        else:
+            raise ValueError(f"Unsupported file format: {ext}. Supported formats: CSV, XLS, XLSX")
+        
+        # Find the first completely blank row and stop reading there
+        # This handles cases where there are blank rows followed by "Total" rows
+        first_blank_row_idx = None
+        for idx, row in df.iterrows():
+            # Check if all values in the row are blank/NaN
+            is_blank = True
+            for val in row:
+                if pd.notna(val) and str(val).strip() != "":
+                    is_blank = False
+                    break
+            
+            # When we encounter a blank row, stop reading (don't include this row or any after it)
+            if is_blank:
+                first_blank_row_idx = idx
+                break
+        
+        # If we found a blank row, keep only rows BEFORE it (stop reading at that point)
+        if first_blank_row_idx is not None:
+            df = df.iloc[:first_blank_row_idx]
+        
+        # Clean up: remove any completely empty rows that might have been missed
+        df = df.dropna(how='all')
+        
+        # Reset index after all operations
+        df = df.reset_index(drop=True)
+        
+        return df
+
+    def _get_location_account_from_trading_code(self, trading_code_key):
+        """
+        Generate location account value based on trading code key.
+        
+        Args:
+            trading_code_key (str): Trading code key (e.g., "FT", "FT1", "FT2", "FT3", etc.)
+        
+        Returns:
+            str: Location account value
+        """
+        base_location = "Asio_Sub Fund_4_DBS_INR_8811210011631187"
+        
+        # If key is "FT", return base location without suffix
+        if trading_code_key == "FT":
+            return base_location
+        
+        # For FT1, FT2, FT3, etc., append the key as suffix
+        return f"{base_location}_{trading_code_key}"
+    
+    def concatenate_security_name(self, row):
+        try:
+            symbol = row["Symbol"]
+        except Exception as e:
+            raise Exception(f"Error accessing Symbol: {e}")
+        
+        # Handle NaT (Not a Time) values in ExpiryDate
+        try:
+            value = row.get("ExpiryDate")
+
+            if pd.isna(row["ExpiryDate"]):
+                expiry = ""
+            else:
+                # If already a string → normalize/return safely
+                if isinstance(value, str):
+                    # try to parse into datetime first
+                    try:
+                        # value = pd.to_datetime(value)
+                        value = pd.to_datetime(value, dayfirst=True, errors="coerce")
+                        expiry = value.strftime("%Y%m%d") if value is not pd.NaT else ""
+                    except:
+                        # If string cannot be parsed, return original string (or "")
+                        expiry = value.replace("-", "").replace("/", "")
+                else:
+                    # It is a datetime → directly format
+                    expiry = value.strftime("%Y%m%d")
+                    expiry = row["ExpiryDate"].strftime("%Y%m%d")  # format date
+        except Exception as e:
+            print(e)
+            raise Exception(f"Error processing ExpiryDate: {e}, type: {type(row.get('ExpiryDate', 'N/A'))}, value: {row.get('ExpiryDate', 'N/A')}")
+        
+        # Handle NaT/NaN values in OptionType
+        try:
+            option_type = ""
+            if pd.notna(row["OptionType"]):
+                option_type = str(row["OptionType"])[0] if str(row["OptionType"]) else ""  # first character
+        except Exception as e:
+            raise Exception(f"Error processing OptionType: {e}")
+        
+        # Handle NaT/NaN values in StrikePrice
+        try:
+            strike = ""
+            if pd.notna(row["StrikePrice"]):
+                strike = str(int(row["StrikePrice"]))
+        except Exception as e:
+            raise Exception(f"Error processing StrikePrice: {e}")
+
+        return f"NSE{symbol}{expiry}{option_type}{strike}"
+
+    def _prepare_data_row(self, row, config, trading_code, trading_code_mapping=None, columns=None, event_date=None, settlement_date=None, actual_date=None):
+        """
+        Prepare a single data row based on sub_fund_4_headers list order.
+        
+        Args:
+            row: DataFrame row
+            config: Configuration dictionary (e.g., asio_sf4_ft_config)
+            trading_code: Trading code string (e.g., "FT", "FT1", "FT2")
+            trading_code_mapping: Dictionary mapping trading codes to location accounts (optional)
+            columns: DataFrame columns list to check for column existence (optional)
+            event_date: Event date (datetime object, optional)
+            settlement_date: Settlement date (datetime object, optional)
+            actual_date: Actual date (datetime object, optional)
+        
+        Returns:
+            list: Prepared row data in sub_fund_4_headers order
+        """
+        prepared_row = []
+        try:
+            security_name = self.concatenate_security_name(row)
+        except Exception as e:
+            raise Exception(f"Error in concatenate_security_name: {e}")
+        
+        # Get location account based on trading code
+        location_account = None
+        if trading_code_mapping and trading_code in trading_code_mapping:
+            # Use value from consolidated_data.json mapping
+            location_account = trading_code_mapping[trading_code]
+        else:
+            # Generate using function if not in mapping
+            location_account = self._get_location_account_from_trading_code(trading_code)
+        
+        # Format dates if provided (format: YYYY-MM-DD)
+        event_date_str = ""
+        settlement_date_str = ""
+        actual_date_str = ""
+        
+        if event_date:
+            event_date_str = event_date.strftime("%d-%m-%Y")
+        if settlement_date:
+            settlement_date_str = settlement_date.strftime("%d-%m-%Y")
+        if actual_date:
+            actual_date_str = actual_date.strftime("%d-%m-%Y")
+        # Process each header in sub_fund_4_headers order
+        for header in sub_fund_4_headers:
+            # Check if this header should be kept blank
+            if header in keep_blank_for_headers:
+                prepared_row.append("")
+                continue
+            
+            # Special handling for RecordType
+            if header == RECORDTYPE:
+                if columns and BuySellIndicator in columns:
+                    buy_sell_value = row.get(BuySellIndicator, "")
+                    if buy_sell_value is not None:
+                        prepared_row.append(buy_sell_value)
+                    else:
+                        prepared_row.append(config.get("RecordType", ""))
+                else:
+                    prepared_row.append(config.get("RecordType", ""))
+                continue
+            
+            # Special handling for RecordAction
+            if header == RECORDACTION:
+                prepared_row.append(config.get(RECORDACTION, ""))
+                continue
+            
+            # Special handling for KeyValue
+            if header == KEYVALUE:
+                prepared_row.append(security_name)
+                continue
+            
+            # Special handling for KeyValue.KeyName
+            if header == KEYVALUE_KEYNAME:
+                prepared_row.append(config.get(KEYVALUE_KEYNAME, ""))
+                continue
+            
+            # Special handling for UserTranId1
+            if header == USERTRANID1:
+                prepared_row.append(config.get(USERTRANID1, ""))
+                continue
+            
+            # Special handling for Portfolio
+            if header == PORTFOLIO:
+                prepared_row.append(config.get(PORTFOLIO, ""))
+                continue
+            
+            # Special handling for LocationAccount
+            if header == LOCATIONACCOUNT:
+                prepared_row.append(location_account)
+                continue
+            
+            # Special handling for Strategy
+            if header == STRATEGY:
+                prepared_row.append(config.get(STRATEGY, ""))
+                continue
+            
+            # Special handling for Investment
+            if header == INVESTMENT:
+                prepared_row.append(security_name)
+                continue
+            
+            if header == PRICEDENOMINATION:
+                prepared_row.append(config.get(PRICEDENOMINATION, ""))
+                continue
+
+            # Special handling for EventDate
+            if header == EVENTDATE:
+                prepared_row.append(event_date_str)
+                continue
+            
+            # Special handling for SettleDate
+            if header == SETTLEDATE:
+                prepared_row.append(settlement_date_str)
+                continue
+            
+            # Special handling for ActualSettleDate
+            if header == ACTUALSETTLEDATE:
+                prepared_row.append(actual_date_str)
+                continue
+            
+            # Special handling for Quantity
+            if header == QUANTITY:
+                if columns and TradeQuantity in columns:
+                    prepared_row.append(row.get(TradeQuantity, ""))
+                continue
+            
+            # Special handling for Price
+            if header == PRICE:
+                if columns and PRICE in columns:
+                    prepared_row.append(row.get(PRICE, ""))
+                continue
+            
+            # Special handling for PriceDenomination
+            if header == PRICEDENOMINATION:
+                prepared_row.append(config.get(PRICEDENOMINATION, ""))
+                continue
+            
+            # Special handling for CounterInvestment
+            if header == COUNTERINVESTMENT:
+                prepared_row.append(config.get(COUNTERINVESTMENT, ""))
+                continue
+            
+            # Special handling for NetInvestmentAmount
+            if header == NETINVESTMENTAMOUNT:
+                prepared_row.append(config.get(NETINVESTMENTAMOUNT, ""))
+                continue
+            
+            # Special handling for NetCounterAmount
+            if header == NETCOUNTERAMOUNT:
+                prepared_row.append(config.get(NETCOUNTERAMOUNT, ""))
+                continue
+            
+            # Special handling for FundStructure
+            if header == FUNDSTRUCTURE:
+                prepared_row.append(config.get(FUNDSTRUCTURE, ""))
+                continue
+            
+            # Special handling for CounterFXDenomination
+            if header == COUNTERFXDENOMINATION:
+                prepared_row.append(config.get(COUNTERFXDENOMINATION, ""))
+                continue
+        
+        return prepared_row
+    
+    def _submit(self):
+        """Handle form submission."""
+        # Validate files
+        if not self.selected_files:
+            messagebox.showwarning("Warning", "Please select at least one file to process.")
+            self.status_var.set("Error: No files selected")
+            return
+
+        # Validate dates
+        try:
+            event_date = self.event_date_entry.get_date()
+            settlement_date = self.settlement_date_entry.get_date()
+            actual_date = self.actual_date_entry.get_date()
+        except Exception as e:
+            messagebox.showerror("Error", f"Invalid date selection: {str(e)}")
+            self.status_var.set("Error: Invalid date")
+            return
+
+        # Validate row and column inputs
+        try:
+            read_row = int(self.read_row_var.get())
+            
+            if read_row < 1:
+                messagebox.showwarning("Warning", "Read From Row must be at least 1")
+                return
+            
+            # Convert column letter to index
+            column_letter = self.read_col_var.get().strip().upper()
+            if not column_letter:
+                messagebox.showwarning("Warning", "Please enter a valid column letter (A, B, C, etc.)")
+                return
+            
+            read_col = self._column_letter_to_index(column_letter)
+            
+            if read_col < 0:
+                messagebox.showwarning("Warning", "Invalid column letter. Please use A-Z or AA-ZZ format.")
+                return
+            
+            # Save read configuration for next time
+            self._save_read_config(read_row, column_letter)
+        except ValueError:
+            messagebox.showerror("Error", "Read From Row must be a valid number")
+            self.status_var.set("Error: Invalid row value")
+            return
+        except Exception as e:
+            messagebox.showerror("Error", f"Invalid column input: {str(e)}")
+            self.status_var.set("Error: Invalid column value")
+            return
+
+        # Process the submission
+        self.status_var.set("Processing... Please wait")
+        
+        # Load configurations from consolidated_data.json (once for all files)
+        from my_app.file_utils import get_app_directory
+        app_dir = get_app_directory()
+        consolidated_path = os.path.join(app_dir, "consolidated_data.json")
+        
+        try:
+            if os.path.exists(consolidated_path):
+                with open(consolidated_path, "r", encoding="utf-8") as f:
+                    consolidated_data = json.load(f)
+            else:
+                raise FileNotFoundError("consolidated_data.json not found")
+            
+            # Extract ASIO Sub Fund 4 configuration (single config for all trading codes)
+            asio_sf4_ft_config = consolidated_data.get("asio_sf4_ft", {})
+            
+            # Extract trading code mapping
+            trading_code_mapping = consolidated_data.get("asio_sf4_trading_code_mapping", {})
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load consolidated_data.json: {e}")
+            self.status_var.set(f"Error: Failed to load configurations")
+            return
+        
+        # Dynamic dictionary to store data by trading code (shared across all files)
+        self.loader_data = defaultdict(list)
+        
+        # Process all files in the list
+        total_rows_processed = 0
+        total_files_processed = 0
+        
+        try:
+            for file_index, file_path in enumerate(self.selected_files):
+                self.status_var.set(f"Processing file {file_index + 1}/{len(self.selected_files)}: {os.path.basename(file_path)}")
+                
+                # Read file with correct parameters:
+                # header_row: 1-based row number where headers are (use read_row)
+                # header_start_col: 0-based column index where headers start (use read_col)
+                df = self.read_dynamic_file(
+                    file_path=file_path,
+                    header_row=read_row,  # Row number (1-based) where header is located
+                    header_start_col=read_col,  # Column index (0-based) where headers start
+                    sheet_name=0
+                )
+                
+                # Process each row in the current file
+                for index, row in df.iterrows():
+                    try:
+                        trading_code = str(row.get(TradingCode, "")).strip()
+                    except Exception as e:
+                        raise Exception(f"Error getting TradingCode at row {index} in file {os.path.basename(file_path)}: {e}")
+                    
+                    try:
+                        # Use single asio_sf4_ft config for all trading codes
+                        # LocationAccount will be set dynamically based on trading code
+                        # Pass dates and DataFrame columns
+                        data_row = self._prepare_data_row(
+                            row, 
+                            asio_sf4_ft_config, 
+                            trading_code, 
+                            trading_code_mapping, 
+                            columns=df.columns.tolist(),
+                            event_date=event_date,
+                            settlement_date=settlement_date,
+                            actual_date=actual_date
+                        )
+                    except Exception as e:
+                        raise Exception(f"Error in _prepare_data_row at row {index} in file {os.path.basename(file_path)}: {e}")
+
+                    self.loader_data[trading_code].append(data_row)
+                    total_rows_processed += 1
+                
+                total_files_processed += 1
+            
+            self.status_var.set(f"Processed {total_files_processed} file(s) successfully - {total_rows_processed} total rows processed")
+            
+            # Automatically export to template after processing all files
+            self._export_to_template()
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to read file: {str(e)}")
+            self.status_var.set(f"Error: {str(e)}")
+            return
+    
+    def _export_to_template(self):
+        """Export data to template format (ZIP with Excel files separated by trading code)."""
+        if not hasattr(self, 'loader_data') or not self.loader_data:
+            messagebox.showinfo("Nothing to export", "Process files first to generate template data.")
+            return
+        
+        # Ask output path for zip file
+        out_path = filedialog.asksaveasfilename(
+            title="Save Template Data",
+            defaultextension=".zip",
+            filetypes=[["ZIP Files", "*.zip"]],
+            initialfile="ASIO_Sub_Fund_4_Template.zip"
+        )
+        if not out_path:
+            self.status_var.set("Export cancelled by user")
+            return
+        
+        # Show spinner (non-blocking)
+        loader = LoadingSpinner(self, text="Exporting templates...")
+
+        def task():
+            try:
+                excel_files = []
+                
+                # Create one Excel file for each trading code
+                for trading_code, data_list in sorted(self.loader_data.items()):
+                    if not data_list:
+                        continue
+                    
+                    # Convert list of lists to list of dicts
+                    # Each row in data_list is a list matching sub_fund_4_headers order
+                    template_data_dicts = []
+                    for row in data_list:
+                        row_dict = {}
+                        for idx, header in enumerate(sub_fund_4_headers):
+                            if idx < len(row):
+                                row_dict[header] = row[idx]
+                            else:
+                                row_dict[header] = ''
+                        template_data_dicts.append(row_dict)
+                    
+                    # Create Excel file using helper function
+                    if template_data_dicts:
+                        template_filename = f"ASIO_SF4_{trading_code}_Template.xlsx"
+                        excel_file, excel_name = output_save_in_template(
+                            template_data_dicts,
+                            sub_fund_4_headers,
+                            template_filename
+                        )
+                        excel_files.append((excel_file, excel_name))
+                
+                if not excel_files:
+                    loader.close()
+                    messagebox.showwarning("Warning", "No template data to export.")
+                    return
+                
+                # Create zip file
+                zip_buffer = multiple_excels_to_zip(excel_files, "ASIO_Sub_Fund_4_Template.zip")
+                
+                # Save zip file
+                with open(out_path, 'wb') as f:
+                    f.write(zip_buffer.read())
+                
+                file_list = [name for _, name in excel_files]
+                loader.close()
+                messagebox.showinfo(
+                    "Success", 
+                    f"Template data exported to:\n{out_path}\n\n"
+                    f"Contains {len(file_list)} file(s):\n" + 
+                    "\n".join([f"- {file}" for file in file_list])
+                )
+            except Exception as e:
+                loader.close()
+                messagebox.showerror("Error", f"Failed to export template data: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Run heavy work in thread
+        threading.Thread(target=task, daemon=True).start()
