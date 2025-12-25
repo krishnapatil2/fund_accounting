@@ -84,9 +84,10 @@ def ensure_consolidated_data_file():
             "NonCapExpenses.NonCapPaymentType2": ""
         },
         "asio_sf4_trading_code_mapping": {
-            "FT": "Asio_Sub Fund_4_DBS_INR_8811210011631187",
-            "FT1": "Asio_Sub Fund_4_DBS_INR_8811210011631187_FT1",
-            "FT2": "Asio_Sub Fund_4_DBS_INR_8811210011631187_FT2",
+            "FT": "Asio_Sub Fund_4_OHM_FO_DBSBK0000289_FT",
+            "FT1": "Asio_Sub Fund_4_OHM_FO_DBSBK0000289_FT1",
+            "FT2": "Asio_Sub Fund_4_OHM_FO_DBSBK0000289_FT2",
+            "FT3": "Asio_Sub Fund_4_OHM_FO_DBSBK0000289_FT3",
         },
         "asio_sub_fund4_read_config": {
             "read_from_row": 1,
@@ -249,7 +250,7 @@ def ensure_consolidated_data_file():
                     "Password": ""
                 }
             },
-            "asio_portfolio_mapping": {
+            "asio_recon_portfolio_mapping": {
                 "ASIO - SF 3": "THE ASIO FUND VCC - SUB-FUND 3",
                 "ASIO - SF 8_Golden": "THE ASIO FUND VCC - EMKAY BHARAT FUND - BHARATS GOLDEN DECADE",
                 "ASIO-SF1_": "THE ASIO FUND VCC - FORT PANGEA",
@@ -261,7 +262,7 @@ def ensure_consolidated_data_file():
                 "ASIO - SF 2": "",
                 "ASIO - SF 7": ""
             },
-            "asio_format_1_headers": {
+            "asio_recon_format_1_headers": {
                 "CLN_CODE": "Cln Code",
                 "CLN_NAME": "Cln Name",
                 "INSTR_CODE": "Instr Code",
@@ -281,7 +282,7 @@ def ensure_consolidated_data_file():
                 "SALEABLE": "Saleable",
                 "CONTRACTUAL": "Contractual"
             },
-            "asio_format_2_headers": {
+            "asio_recon_format_2_headers": {
                 "VALUE_DATE_AS_AT": "Value date as at",
                 "SERVICE_LOCATION": "Service location",
                 "SECURITIES_ACCOUNT_NAME": "Securities account name",
@@ -302,7 +303,7 @@ def ensure_consolidated_data_file():
                 "INDICATIVE_SETTLED_VALUE_INR": "Indicative settled value in INR",
                 "INDICATIVE_TRADED_VALUE_INR": "Indicative traded value in INR"
             },
-            "asio_bhavcopy_headers": {
+            "asio_recon_bhavcopy_headers": {
                 "TRADDT": "TradDt",
                 "BIZDT": "BizDt",
                 "SGMT": "Sgmt",
@@ -546,6 +547,10 @@ def ensure_consolidated_data_file():
         # Add ASIO Sub Fund 4 configurations to default data
         default_data.update(asio_sf4_configs)
         
+        # Add filter configurations to default data
+        default_data["mcx_group2_filters"] = ['Commodity Future Option', 'Commodity Option', 'Commodity Future']
+        default_data["fno_group2_filters"] = ['Equity Option', 'Index Option', 'Index Future', 'Equity future']
+        
         # Save the default consolidated data file
         try:
             with open(consolidated_path, "w", encoding="utf-8") as f:
@@ -562,6 +567,9 @@ def ensure_consolidated_data_file():
                 # File is empty, recreate with default data including ASIO SF4 configs
                 default_data = {}
                 default_data.update(asio_sf4_configs)
+                # Add filter configurations
+                default_data["mcx_group2_filters"] = ['Commodity Future Option', 'Commodity Option', 'Commodity Future']
+                default_data["fno_group2_filters"] = ['Equity Option', 'Index Option', 'Index Future', 'Equity future']
                 with open(consolidated_path, "w", encoding="utf-8") as f:
                     json.dump(default_data, f, indent=4, ensure_ascii=False)
             else:
@@ -574,6 +582,9 @@ def ensure_consolidated_data_file():
                     # Invalid format, recreate with default data
                     consolidated_data = {}
                     consolidated_data.update(asio_sf4_configs)
+                    # Add filter configurations
+                    consolidated_data["mcx_group2_filters"] = ['Commodity Future Option', 'Commodity Option', 'Commodity Future']
+                    consolidated_data["fno_group2_filters"] = ['Equity Option', 'Index Option', 'Index Future', 'Equity future']
                     with open(consolidated_path, "w", encoding="utf-8") as f:
                         json.dump(consolidated_data, f, indent=4, ensure_ascii=False)
                 else:
@@ -583,6 +594,18 @@ def ensure_consolidated_data_file():
                         if key not in consolidated_data:
                             consolidated_data[key] = config
                             updated = True
+                    
+                    # Initialize filter configurations if they don't exist
+                    default_mcx_filters = ['Commodity Future Option', 'Commodity Option', 'Commodity Future']
+                    default_fno_filters = ['Equity Option', 'Index Option', 'Index Future', 'Equity future']
+                    
+                    if "mcx_group2_filters" not in consolidated_data:
+                        consolidated_data["mcx_group2_filters"] = default_mcx_filters
+                        updated = True
+                    
+                    if "fno_group2_filters" not in consolidated_data:
+                        consolidated_data["fno_group2_filters"] = default_fno_filters
+                        updated = True
                     
                     # Save updated data if changes were made
                     if updated:
@@ -599,6 +622,9 @@ def ensure_consolidated_data_file():
                 # Recreate with default data including ASIO SF4 configs
                 default_data = {}
                 default_data.update(asio_sf4_configs)
+                # Add filter configurations
+                default_data["mcx_group2_filters"] = ['Commodity Future Option', 'Commodity Option', 'Commodity Future']
+                default_data["fno_group2_filters"] = ['Equity Option', 'Index Option', 'Index Future', 'Equity future']
                 with open(consolidated_path, "w", encoding="utf-8") as f:
                     json.dump(default_data, f, indent=4, ensure_ascii=False)
                 print(f"Warning: consolidated_data.json was corrupted. Recreated file. Backup saved as {backup_path}")

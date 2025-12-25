@@ -444,8 +444,10 @@ class FOReconciliationPage(tk.Frame):
                 
                 # Process each file (including Geneva and BhavCopy)
                 for item in holdings_data:
+                    print('item:', item['filename'])
                     self._process_holdings_file(item, fund_map, data_dict)
                 
+                # breakpoint()
                 # Export to Excel
                 zip_path = self._export_to_excel(export_path, data_dict)
                 
@@ -459,6 +461,7 @@ class FOReconciliationPage(tk.Frame):
                 )
                 
             except Exception as e:
+                raise e
                 loader.close()
                 messagebox.showerror("Export Error", f"Export failed:\n{str(e)}")
                 self.status_var.set("Export failed")
@@ -616,7 +619,8 @@ class FOReconciliationPage(tk.Frame):
         
         # Process regular holdings files
         fund_name = self._get_fund_name(filename, fund_map)
-        
+        print(f"Processing {filename} as {fund_name}")
+
         for _, row in df.iterrows():
             try:
                 # Build row values with proper numeric conversion
@@ -637,6 +641,7 @@ class FOReconciliationPage(tk.Frame):
 
             except Exception as e:
                 continue
+        # breakpoint()
 
     def _process_geneva_data(self, df, data_dict):
         """Process Geneva data and add to data_dict"""
@@ -670,7 +675,6 @@ class FOReconciliationPage(tk.Frame):
                 unique_code = f"{investment_desc}{fund_name_in_custody_holding}"
                 investment = str(row['Investment']).strip()
                 nse_price = self.bhavcopy_price_dict.get(investment)
-                
                 # Handle None values for nse_price
                 if nse_price is None:
                     nse_price = 0.0
@@ -870,6 +874,8 @@ class FOReconciliationPage(tk.Frame):
         # Process other sheets
         for key, headers in sheet_configs:
             if data_dict[key]:
+                print(f"Preparing sheet: {key}")
+                print(f"data: {len(data_dict[key][0])} {len(headers)}")
                 df = pd.DataFrame(data_dict[key], columns=headers)
                 sheets_to_create.append((key, df))
 

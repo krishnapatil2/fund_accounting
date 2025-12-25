@@ -4,16 +4,14 @@ import os
 import json
 import zipfile
 from datetime import datetime
-from openpyxl import load_workbook
-from openpyxl.utils.dataframe import dataframe_to_rows
-from openpyxl.styles import Alignment, Font, Border
 from decimal import Decimal
-from CONSTANTS import *
-import pandas as pd
 import threading
 
 from my_app.pages.loading import LoadingSpinner
-from .helper import output_save_in_template, multiple_excels_to_zip, read_file
+
+# LAZY IMPORTS - Heavy libraries imported only when needed (in methods)
+# This speeds up frame opening significantly
+# pandas, openpyxl, and CONSTANTS will be imported in _process() method when actually needed
 
 
 def _safe_decimal(value, precision=15):
@@ -212,6 +210,9 @@ class ASIOTradeLoaderPage(tk.Frame):
     # ---- Core processing ----
     def _process(self):
         """Process the file (CSV/XLS/XLSX) and populate table."""
+        # Lazy import heavy libraries only when processing (speeds up frame opening)
+        from .helper import read_file
+        
         # Clear table
         for it in self.tree.get_children():
             self.tree.delete(it)
@@ -263,6 +264,25 @@ class ASIOTradeLoaderPage(tk.Frame):
                 )
                 # Clean headers (strip whitespace)
                 df_bhavcopy.columns = df_bhavcopy.columns.str.strip()
+                
+                # Validate bhavcopy: Check if "Sgmt" column contains "FO"
+                if not df_bhavcopy.empty:
+                    # Check if "Sgmt" column exists (case-insensitive)
+                    sgmt_col = None
+                    for col in df_bhavcopy.columns:
+                        if col.strip().upper() == 'SGMT':
+                            sgmt_col = col
+                            break
+                    
+                    if sgmt_col:
+                        # Check if any row has "FO" in Sgmt column
+                        if df_bhavcopy[sgmt_col].astype(str).str.strip().str.upper().isin(['FO']).any():
+                            filename = os.path.basename(bhavcopy_path)
+                            messagebox.showwarning(
+                                "Wrong Bhavcopy File",
+                                f"Warning: The selected bhavcopy file '{filename}' contains 'FO' in the 'Sgmt' column.\n\n"
+                                "This is the wrong bhavcopy file. Please attach equity bhavcopy file."
+                            )
             except Exception as e:
                 messagebox.showwarning("Warning", f"Failed to read Bhavcopy file: {e}\nContinuing without bhavcopy data.")
                 df_bhavcopy = None
@@ -354,6 +374,10 @@ class ASIOTradeLoaderPage(tk.Frame):
                UnderlyingInvestment, StrikePrice, Option/Future Type, PutCallFlag, ExpireDate]
             - df_bhavcopy can be used for additional processing logic
         """
+        # Lazy import pandas (used for pd.notna check)
+        import pandas as pd
+        from CONSTANTS import TM_NAME_HEADERS, ASIO_FUTURE_SF2_HEADER, ASIO_SUB_FUND_2_OPTION_SECURITY_HEADER
+        
         left_table_data = []  # All trade records
         right_table_data = []  # Unique trade records based on "Securitiy Nmaes"
         asio_sub_fund_2_future = []
@@ -477,7 +501,7 @@ class ASIOTradeLoaderPage(tk.Frame):
             
             # Add ALL records to left table
             left_table_data.append(row_data)
-
+            
             # Add Future security only when not Option (CE/PE)
             if option_future_val != "CE" and option_future_val != "PE":
                 future_dict = {}
@@ -638,6 +662,10 @@ class ASIOTradeLoaderPage(tk.Frame):
 
     def _export_excel(self):
         """Export data to Excel file."""
+        # Lazy import heavy libraries only when exporting
+        import pandas as pd
+        from openpyxl.styles import Font, Border
+        
         if not self.all_table_rows and not self.unique_table_rows:
             messagebox.showinfo("Nothing to export", "Process a file first.")
             return
@@ -686,6 +714,10 @@ class ASIOTradeLoaderPage(tk.Frame):
 
     def _export_to_template(self):
         """Export data to template format (ZIP with Excel files grouped by TM code)."""
+        # Lazy import heavy libraries only when exporting
+        from CONSTANTS import TM_NAME_HEADERS, ASIO_SUB_FUND_2_OPTION_SECURITY_HEADER
+        from .helper import output_save_in_template, multiple_excels_to_zip
+        
         if not hasattr(self, 'data_by_tm_code') or not self.data_by_tm_code:
             messagebox.showinfo("Nothing to export", "Process a file first to generate template data.")
             return
@@ -695,7 +727,7 @@ class ASIOTradeLoaderPage(tk.Frame):
             title="Save Template Data",
             defaultextension=".zip",
             filetypes=[["ZIP Files", "*.zip"]],
-            initialfile="ASIOTradeLoader.zip"
+            initialfile="FNO_ASIO_SF2_TradeLoader.zip"
         )
         if not out_path:
             return
@@ -743,7 +775,7 @@ class ASIOTradeLoaderPage(tk.Frame):
                     return
                 
                 # Create zip file
-                zip_buffer = multiple_excels_to_zip(excel_files, "ASIOTradeLoader.zip")
+                zip_buffer = multiple_excels_to_zip(excel_files, "FNO_ASIO_SF2_TradeLoader.zip")
                 
                 # Save zip file
                 with open(out_path, 'wb') as f:

@@ -391,8 +391,21 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
                 raise ValueError(f"LPA file missing required columns: {missing_cols}")
             
             # Filter LPA data based on selected segment
-            mcx_group2_filters = ['Commodity Future Option', 'Commodity Option','Commodity Future']
-            fno_group2_filters = ['Equity Option', 'Index Option','Index Future']
+            # Read filters dynamically from consolidated_data.json (configured via Data Config)
+            mcx_group2_filters = consolidated_data.get("mcx_group2_filters")
+            fno_group2_filters = consolidated_data.get("fno_group2_filters")
+            
+            # Validate filters exist and are lists
+            if not isinstance(mcx_group2_filters, list):
+                raise ValueError(
+                    "MCX Group2 filters not configured. Please configure 'mcx_group2_filters' "
+                    "in Data Config (consolidated_data.json). Expected format: list of filter strings."
+                )
+            if not isinstance(fno_group2_filters, list):
+                raise ValueError(
+                    "FNO Group2 filters not configured. Please configure 'fno_group2_filters' "
+                    "in Data Config (consolidated_data.json). Expected format: list of filter strings."
+                )
             
             # Filter based on selected segment (don't combine - process only selected segment)
             if segment == 'MCX':

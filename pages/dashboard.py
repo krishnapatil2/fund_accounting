@@ -172,7 +172,7 @@ class DashboardPage(tk.Frame):
         )
         
         # Count reports/modules
-        report_count = 7  # Based on MENU_STRUCTURE
+        report_count = 8  # Based on MENU_STRUCTURE
         
         # Card color - using #367a58 for reports card
         bg_color = "#367a58"
@@ -214,6 +214,7 @@ class DashboardPage(tk.Frame):
             ("📊 ASIO SF2 Trade Loader FNO", "Process FNO trade files"),
             ("📊 ASIO SF2 Trade Loader MCX", "Process MCX trade files"),
             ("📋 ASIO Sub Fund 4", "Process Sub Fund 4 trade files"),
+            ("📈 Daily F&O Reconciliation", "Daily F&O reconciliation process"),
             ("💰 FNO/MCX Price Recon", "Price reconciliation reports"),
             ("📑 Excel Merger", "Merge multiple Excel files"),
         ]
@@ -342,24 +343,29 @@ class DashboardPage(tk.Frame):
         return None
     
     def _navigate_to_report(self, report_name):
-        """Navigate to report page"""
-        # Map report names to page classes
+        """Navigate to report page - optimized with lazy imports"""
+        # Lazy import only the specific module needed (not all at once)
         try:
-            from pages import (alpha_report, asio_reconciliation, asio_trade_loader,
-                              asio_trade_loader_mcx, asio_sub_fund4, 
-                              fno_mcx_price_recon_loader, excel_merger)
-            
-            report_map = {
-                "📈 Alpha Report": alpha_report.AlphaReportPage,
-                "🔄 ASIO Reconciliation": asio_reconciliation.ASIOReconciliationPage,
-                "📊 ASIO SF2 Trade Loader FNO": asio_trade_loader.ASIOTradeLoaderPage,
-                "📊 ASIO SF2 Trade Loader MCX": asio_trade_loader_mcx.ASIOTradeLoaderMCXPage,
-                "📋 ASIO Sub Fund 4": asio_sub_fund4.ASIOSubFund4Page,
-                "💰 FNO/MCX Price Recon": fno_mcx_price_recon_loader.FNOMCXPriceReconLoaderPage,
-                "📑 Excel Merger": excel_merger.ExcelMergerPage,
+            # Map report names to (module_name, class_name) for lazy loading
+            report_to_module = {
+                "📈 Alpha Report": ("alpha_report", "AlphaReportPage"),
+                "🔄 ASIO Reconciliation": ("asio_reconciliation", "ASIOReconciliationPage"),
+                "📊 ASIO SF2 Trade Loader FNO": ("asio_trade_loader", "ASIOTradeLoaderPage"),
+                "📊 ASIO SF2 Trade Loader MCX": ("asio_trade_loader_mcx", "ASIOTradeLoaderMCXPage"),
+                "📋 ASIO Sub Fund 4": ("asio_sub_fund4", "ASIOSubFund4Page"),
+                "📈 Daily F&O Reconciliation": ("fo_reconciliation", "FOReconciliationPage"),
+                "💰 FNO/MCX Price Recon": ("fno_mcx_price_recon_loader", "FNOMCXPriceReconLoaderPage"),
+                "📑 Excel Merger": ("excel_merger", "ExcelMergerPage"),
             }
             
-            page_class = report_map.get(report_name)
+            if report_name not in report_to_module:
+                return
+            
+            # Lazy import only the specific module needed
+            module_name, class_name = report_to_module[report_name]
+            module = __import__(f"pages.{module_name}", fromlist=[class_name])
+            page_class = getattr(module, class_name)
+            
             if page_class:
                 # Try to find main app by traversing to root
                 root = self.winfo_toplevel()
@@ -387,10 +393,13 @@ class DashboardPage(tk.Frame):
             "aafspl_car_future": ["Alpha Report"],
             "option_security": ["Alpha Report"],
             "car_trade_loader": ["Alpha Report"],
-            "asio_format_1_headers": ["ASIO Reconciliation"],
-            "asio_format_2_headers": ["ASIO Reconciliation"],
-            "asio_bhavcopy_headers": ["ASIO Reconciliation"],
-            "asio_portfolio_mapping": ["ASIO Reconciliation"],
+            "asio_recon_format_1_headers": ["ASIO Reconciliation"],
+            "asio_recon_format_2_headers": ["ASIO Reconciliation"],
+            "asio_recon_bhavcopy_headers": ["ASIO Reconciliation"],
+            "asio_recon_portfolio_mapping": ["ASIO Reconciliation"],
+            "asio_geneva_headers": ["ASIO Reconciliation"],
+            "geneva_custodian_mapping": ["ASIO Reconciliation"],
+            "fund_filename_map": ["Alpha Report", "ASIO Reconciliation"],
             "asio_sf_2_trade_loader": ["ASIO Sub Fund 2 Trade Loader FNO"],
             "asio_sf_2_option_security": ["ASIO Sub Fund 2 Trade Loader FNO"],
             "asio_sf_2_future_security": ["ASIO Sub Fund 2 Trade Loader FNO"],
@@ -405,8 +414,8 @@ class DashboardPage(tk.Frame):
             "asio_sub_fund4_read_config": ["ASIO Sub Fund 4"],
             "asio_pricing_fno": ["FNO and MCX Price Recon & Loader"],
             "asio_pricing_mcx": ["FNO and MCX Price Recon & Loader"],
-            "asio_geneva_headers": ["Geneva Reports"],
-            "geneva_custodian_mapping": ["Geneva Reports"],
+            "mcx_group2_filters": ["FNO and MCX Price Recon & Loader"],
+            "fno_group2_filters": ["FNO and MCX Price Recon & Loader"],
         }
     
     def create_dataset_overview(self, parent, config_data):

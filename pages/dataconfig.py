@@ -82,22 +82,121 @@ class DataConfigPage(tk.Frame):
         selector_frame = tk.Frame(header_frame, bg="#ecf0f1")
         selector_frame.pack(side="left", padx=20)
         tk.Label(selector_frame, text="Dataset:", font=("Arial", 11), bg="#ecf0f1").pack(side="left")
-        self.dataset_var = tk.StringVar(value="Lotsize")
-        self.dataset_combo = ttk.Combobox(
-            selector_frame,
-            state="readonly",
-            width=28,
-            values=["Lotsize", "UnderlyingCode"] + list(self.dataset_files.keys()),
-            textvariable=self.dataset_var,
-        )
-        # Store reference to update values later
+        
+        # Store all available dataset values for search filtering
+        self._all_dataset_values = ["Lotsize", "UnderlyingCode"] + list(self.dataset_files.keys())
         self._base_dataset_values = ["Lotsize", "UnderlyingCode"]
-        self.dataset_combo.pack(side="left", padx=(6, 0))
+        
+        # Search entry (simple, no container needed)
+        self.dataset_var = tk.StringVar(value="Lotsize")
+        self.search_entry = tk.Entry(selector_frame, textvariable=self.dataset_var, width=28, font=("Arial", 10))
+        self.search_entry.pack(side="left", padx=(6, 0))
+        
+        # Results listbox (positioned absolutely, doesn't affect layout)
+        self.results_listbox = tk.Listbox(self, width=28, height=8, font=("Arial", 10), relief="solid", borderwidth=1)
+        # Initially hidden, will be positioned using place() when shown
+        
+        # Real-time search as user types
+        def on_search_change(*args):
+            search_term = self.dataset_var.get().strip().lower()
+            
+            if search_term:
+                # Filter values that contain the search term
+                filtered = [v for v in self._all_dataset_values if search_term in v.lower()]
+            else:
+                # Show all values if search is empty
+                filtered = self._all_dataset_values
+            
+            # Update listbox
+            self.results_listbox.delete(0, tk.END)
+            for item in filtered:
+                self.results_listbox.insert(tk.END, item)
+            
+            # Show listbox if there are results
+            if filtered:
+                self._show_listbox()
+            else:
+                self._hide_listbox()
+        
+        # Bind search entry changes
+        self.dataset_var.trace_add("write", on_search_change)
+        
+        # Show listbox when search entry gets focus
+        def on_search_focus_in(event):
+            # Show all values when clicking into search
+            search_term = self.dataset_var.get().strip().lower()
+            if not search_term:
+                filtered = self._all_dataset_values
+                self.results_listbox.delete(0, tk.END)
+                for item in filtered:
+                    self.results_listbox.insert(tk.END, item)
+                self._show_listbox()
+        
+        self.search_entry.bind('<FocusIn>', on_search_focus_in)
+        
+        # Track if listbox is visible
+        self._listbox_visible = False
+        
+        # Method to show listbox positioned below search entry
+        def _show_listbox():
+            try:
+                # Get search entry position
+                self.update_idletasks()
+                x = self.search_entry.winfo_rootx() - self.winfo_rootx()
+                y = self.search_entry.winfo_rooty() - self.winfo_rooty() + self.search_entry.winfo_height()
+                width = self.search_entry.winfo_width()
+                
+                # Position listbox below search entry
+                self.results_listbox.place(x=x, y=y, width=width)
+                self.results_listbox.lift()
+                self._listbox_visible = True
+            except:
+                pass
+        
+        # Method to hide listbox
+        def _hide_listbox():
+            self.results_listbox.place_forget()
+            self._listbox_visible = False
+        
+        self._show_listbox = _show_listbox
+        self._hide_listbox = _hide_listbox
+        
+        # When user selects from listbox
+        def on_listbox_select(event):
+            selection = self.results_listbox.curselection()
+            if selection:
+                selected_value = self.results_listbox.get(selection[0])
+                self.dataset_var.set(selected_value)
+                self._hide_listbox()
+                on_dataset_change()
+        
+        self.results_listbox.bind('<Double-Button-1>', on_listbox_select)
+        self.results_listbox.bind('<Return>', on_listbox_select)
+        
+        # When user presses Enter in search entry
+        def on_entry_return(event):
+            # Get first item from listbox if visible
+            if self._listbox_visible:
+                items = self.results_listbox.get(0, tk.END)
+                if items:
+                    self.dataset_var.set(items[0])
+                    self._hide_listbox()
+                    on_dataset_change()
+        
+        self.search_entry.bind('<Return>', on_entry_return)
+        
+        # Hide listbox when clicking outside
+        def hide_listbox(event):
+            if event.widget != self.search_entry and event.widget != self.results_listbox:
+                self._hide_listbox()
+        
+        self.bind('<Button-1>', hide_listbox)
+        
         refresh_btn = tk.Button(selector_frame, text="↻", width=3, command=self.refresh_datasets, bg="#ecf0f1", relief="flat")
         refresh_btn.pack(side="left", padx=(6, 0))
 
         def on_dataset_change(event=None):
-            sel = self.dataset_combo.get()
+            sel = self.dataset_var.get()
             if sel == "Lotsize":
                 self.mode_var.set("LOTSIZE")
             elif sel == "UnderlyingCode":
@@ -131,8 +230,6 @@ class DataConfigPage(tk.Frame):
                 self.header_data = self.datasets[sel]
             self.configure_tree_for_mode()
             self.load_data()
-
-        self.dataset_combo.bind("<<ComboboxSelected>>", on_dataset_change)
 
         control_frame = tk.Frame(header_frame, bg="#ecf0f1")
         control_frame.pack(side="right")
@@ -184,9 +281,9 @@ class DataConfigPage(tk.Frame):
             consolidated_path = os.path.join(app_dir, "consolidated_data.json")
             
             # List of all expected datasets
-            expected_datasets = ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
-                                "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                                "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "asio_sf_2_mcx_future_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_pricing_fno", "asio_pricing_mcx", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config"]
+            expected_datasets = ["fund_filename_map", "asio_recon_portfolio_mapping", "asio_recon_format_1_headers", "asio_recon_format_2_headers", 
+                                "asio_recon_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
+                                "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "asio_sf_2_mcx_future_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_pricing_fno", "asio_pricing_mcx", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config", "mcx_group2_filters", "fno_group2_filters"]
             
             if os.path.exists(consolidated_path):
                 # Load file; if unreadable/empty, recreate with defaults
@@ -525,9 +622,10 @@ class DataConfigPage(tk.Frame):
                             "TaxLotID": ""
                         },
                         "asio_sf4_trading_code_mapping": {
-                            "FT": "Asio_Sub Fund_4_DBS_INR_8811210011631187",
-                            "FT1": "Asio_Sub Fund_4_DBS_INR_8811210011631187_FT1",
-                            "FT2": "Asio_Sub Fund_4_DBS_INR_8811210011631187_FT2"
+                            "FT": "Asio_Sub Fund_4_OHM_FO_DBSBK0000289_FT",
+                            "FT1": "Asio_Sub Fund_4_OHM_FO_DBSBK0000289_FT1",
+                            "FT2": "Asio_Sub Fund_4_OHM_FO_DBSBK0000289_FT2",
+                            "FT3": "Asio_Sub Fund_4_OHM_FO_DBSBK0000289_FT3"
                         }
                     }
                     with open(consolidated_path, "w") as fw:
@@ -790,7 +888,7 @@ class DataConfigPage(tk.Frame):
                             "PricingPrecision": 15,
                             "CashSettledFlag": 1
                         },
-                    "asio_portfolio_mapping": {
+                    "asio_recon_portfolio_mapping": {
                         "ASIO - SF 3": "THE ASIO FUND VCC - SUB-FUND 3",
                         "ASIO - SF 8_Golden": "THE ASIO FUND VCC - EMKAY BHARAT FUND - BHARATS GOLDEN DECADE",
                         "ASIO-SF1_": "THE ASIO FUND VCC - FORT PANGEA",
@@ -802,7 +900,7 @@ class DataConfigPage(tk.Frame):
                         "ASIO - SF 2": "",
                         "ASIO - SF 7": ""
                     },
-                    "asio_format_1_headers": {
+                    "asio_recon_format_1_headers": {
                         "CLN_CODE": "Cln Code",
                         "CLN_NAME": "Cln Name",
                         "INSTR_CODE": "Instr Code",
@@ -822,7 +920,7 @@ class DataConfigPage(tk.Frame):
                         "SALEABLE": "Saleable",
                         "CONTRACTUAL": "Contractual"
                     },
-                    "asio_format_2_headers": {
+                    "asio_recon_format_2_headers": {
                         "VALUE_DATE_AS_AT": "Value date as at",
                         "SERVICE_LOCATION": "Service location",
                         "SECURITIES_ACCOUNT_NAME": "Securities account name",
@@ -843,7 +941,7 @@ class DataConfigPage(tk.Frame):
                         "INDICATIVE_SETTLED_VALUE_INR": "Indicative settled value in INR",
                         "INDICATIVE_TRADED_VALUE_INR": "Indicative traded value in INR"
                     },
-                    "asio_bhavcopy_headers": {
+                    "asio_recon_bhavcopy_headers": {
                         "TRADDT": "TradDt",
                         "BIZDT": "BizDt",
                         "SGMT": "Sgmt",
@@ -1198,9 +1296,9 @@ class DataConfigPage(tk.Frame):
                     self.underlying_code_data = underlying_code_from_file.copy()
                 else:
                     self.underlying_code_data = self.default_underlying_code_data.copy()
-                for dataset_name in ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
-                                    "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config"]:
+                for dataset_name in ["fund_filename_map", "asio_recon_portfolio_mapping", "asio_recon_format_1_headers", "asio_recon_format_2_headers", 
+                                    "asio_recon_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
+                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config", "mcx_group2_filters", "fno_group2_filters"]:
                     if dataset_name in default_consolidated_data:
                         data = default_consolidated_data[dataset_name]
                         # Normalize keys to strings for TM code mappings
@@ -1233,12 +1331,25 @@ class DataConfigPage(tk.Frame):
                     self.tree.insert("", "end", values=(fund_code, default_name, cds_name, password))
                 else:
                     self.tree.insert("", "end", values=(fund_code, "", "", ""))
+        elif self.current_dataset_name in ["mcx_group2_filters", "fno_group2_filters"]:
+            # Handle list-type datasets (filters)
+            if isinstance(self.header_data, list):
+                for index, filter_value in enumerate(self.header_data):
+                    self.tree.insert("", "end", values=(str(index + 1), filter_value))
+            else:
+                # Fallback if data is not a list
+                self.tree.insert("", "end", values=("1", str(self.header_data)))
         else:
-            for header, value in self.header_data.items():
-                display_value = json.dumps(value) if isinstance(value, (dict, list)) else value
-                # Ensure header is always inserted as string to preserve leading zeros
-                header_str = str(header) if header is not None else ""
-                self.tree.insert("", "end", values=(header_str, display_value))
+            # Handle dictionary-type datasets
+            if isinstance(self.header_data, dict):
+                for header, value in self.header_data.items():
+                    display_value = json.dumps(value) if isinstance(value, (dict, list)) else value
+                    # Ensure header is always inserted as string to preserve leading zeros
+                    header_str = str(header) if header is not None else ""
+                    self.tree.insert("", "end", values=(header_str, display_value))
+            else:
+                # Fallback for non-dict, non-list data
+                self.tree.insert("", "end", values=("Value", str(self.header_data)))
         self.edit_btn.config(state="disabled", bg="#bdc3c7", fg="#7f8c8d", relief="flat", bd=1, font=("Arial", 12))
         self.delete_btn.config(state="disabled", bg="#bdc3c7", fg="#7f8c8d", relief="flat", bd=1, font=("Arial", 12))
         self.selected_info.config(text="Select a row to edit or delete", fg="#7f8c8d", font=("Arial", 10))
@@ -1266,11 +1377,19 @@ class DataConfigPage(tk.Frame):
                     # Search in custodian account, fund name, or CDS name
                     if term in fund_code.lower() or term in default_name.lower() or term in cds_name.lower():
                         self.tree.insert("", "end", values=(fund_code, default_name, cds_name, password))
+        elif self.current_dataset_name in ["mcx_group2_filters", "fno_group2_filters"]:
+            # Handle list-type datasets (filters) - filter by value
+            if isinstance(self.header_data, list):
+                for index, filter_value in enumerate(self.header_data):
+                    if term in str(filter_value).lower():
+                        self.tree.insert("", "end", values=(str(index + 1), filter_value))
         else:
-            for header, value in self.header_data.items():
-                if term in header.lower():
-                    display_value = json.dumps(value) if isinstance(value, (dict, list)) else value
-                    self.tree.insert("", "end", values=(header, display_value))
+            # Handle dictionary-type datasets
+            if isinstance(self.header_data, dict):
+                for header, value in self.header_data.items():
+                    if term in header.lower():
+                        display_value = json.dumps(value) if isinstance(value, (dict, list)) else value
+                        self.tree.insert("", "end", values=(header, display_value))
         self.edit_btn.config(state="disabled", bg="#bdc3c7", fg="#7f8c8d", relief="flat", bd=1, font=("Arial", 12))
         self.delete_btn.config(state="disabled", bg="#bdc3c7", fg="#7f8c8d", relief="flat", bd=1, font=("Arial", 12))
         self.selected_info.config(text="Select a row to edit or delete", fg="#7f8c8d", font=("Arial", 10))
@@ -1292,7 +1411,7 @@ class DataConfigPage(tk.Frame):
                 if self.current_dataset_name == "fund_filename_map":
                     fund_code, fund_name = values[0], values[1] if len(values) > 1 else ""
                     self.selected_info.config(text=f"Selected: {fund_code} - {fund_name}", fg="#2c3e50", font=("Arial", 10, "bold"))
-                elif self.current_dataset_name == "asio_portfolio_mapping":
+                elif self.current_dataset_name == "asio_recon_portfolio_mapping":
                     header, val = values[0], values[1] if len(values) > 1 else ""
                     self.selected_info.config(text=f"Selected: Portfolio: {header} (Holding Name: {val})", fg="#2c3e50", font=("Arial", 10, "bold"))
                 elif self.current_dataset_name == "geneva_custodian_mapping":
@@ -1331,6 +1450,12 @@ class DataConfigPage(tk.Frame):
             cds_name = values[2] if len(values) > 2 else ""
             password = values[3] if len(values) > 3 else ""
             self.show_fund_edit_dialog(fund_code, fund_name, cds_name, password)
+        elif self.current_dataset_name in ["mcx_group2_filters", "fno_group2_filters"]:
+            # Handle list-type datasets
+            values = item["values"]
+            index = int(values[0]) - 1  # Convert back to 0-based index
+            filter_value = values[1] if len(values) > 1 else ""
+            self.show_filter_edit_dialog(index, filter_value)
         else:
             header, value = item["values"]
             self.show_header_edit_dialog(header, value)
@@ -1347,6 +1472,29 @@ class DataConfigPage(tk.Frame):
                 del self.lotsize_data[symbol]
                 self.load_data()
                 self.auto_save()
+        elif self.current_dataset_name in ["mcx_group2_filters", "fno_group2_filters"]:
+            # Handle list-type datasets
+            values = item["values"]
+            if not values or len(values) < 2:
+                messagebox.showerror("Error", "Cannot delete: No data found in selected row")
+                return
+            index = int(values[0]) - 1  # Convert back to 0-based index
+            filter_value = values[1]
+            
+            # Ensure dataset is a list
+            if self.current_dataset_name not in self.datasets:
+                self.datasets[self.current_dataset_name] = []
+            if not isinstance(self.datasets[self.current_dataset_name], list):
+                self.datasets[self.current_dataset_name] = []
+            
+            if 0 <= index < len(self.datasets[self.current_dataset_name]):
+                if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete '{filter_value}'?"):
+                    self.datasets[self.current_dataset_name].pop(index)
+                    self.header_data = self.datasets[self.current_dataset_name]
+                    self.load_data()
+                    self.auto_save()
+            else:
+                messagebox.showerror("Error", "Invalid index for deletion")
         else:
             values = item["values"]
             if not values or len(values) == 0:
@@ -1419,6 +1567,9 @@ class DataConfigPage(tk.Frame):
             self.show_edit_dialog(is_underlying_code=True)
         elif self.current_dataset_name == "fund_filename_map":
             self.show_fund_edit_dialog()
+        elif self.current_dataset_name in ["mcx_group2_filters", "fno_group2_filters"]:
+            # Handle list-type datasets - add new item
+            self.show_filter_edit_dialog()
         else:
             self.show_header_edit_dialog()
 
@@ -1441,6 +1592,12 @@ class DataConfigPage(tk.Frame):
             cds_name = values[2] if len(values) > 2 else ""
             password = values[3] if len(values) > 3 else ""
             self.show_fund_edit_dialog(fund_code, fund_name, cds_name, password)
+        elif self.current_dataset_name in ["mcx_group2_filters", "fno_group2_filters"]:
+            # Handle list-type datasets
+            values = item["values"]
+            index = int(values[0]) - 1  # Convert back to 0-based index
+            filter_value = values[1] if len(values) > 1 else ""
+            self.show_filter_edit_dialog(index, filter_value)
         else:
             header, value = item["values"]
             self.show_header_edit_dialog(header, value)
@@ -1803,7 +1960,7 @@ class DataConfigPage(tk.Frame):
             return {"DBSBK0000033": {"Fund Names": {"Default": "DIF-Class 1 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000036": {"Fund Names": {"Default": "DIF-Class 2 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000038": {"Fund Names": {"Default": "DIF-Class 3 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000042": {"Fund Names": {"Default": "DIF-Class 5 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000044": {"Fund Names": {"Default": "DIF-Class 6 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000043": {"Fund Names": {"Default": "DIF-Class 7 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000049": {"Fund Names": {"Default": "DIF-Class 8 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000050": {"Fund Names": {"Default": "DIF-Class 9 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000051": {"Fund Names": {"Default": "DIF-Class 10 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000052": {"Fund Names": {"Default": "DIF-Class 11 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000074": {"Fund Names": {"Default": "DIF-Class 12 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000179": {"Fund Names": {"Default": "DIF-Class 13 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000189": {"Fund Names": {"Default": "DIF-Class 14 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000192": {"Fund Names": {"Default": "DIF-Class 15 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000214": {"Fund Names": {"Default": "DIF-Class 16 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000216": {"Fund Names": {"Default": "DIF-Class 17 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000217": {"Fund Names": {"Default": "DIF-Class 18_Moon"}, "Password": "AAGCD0792B"}, "DBSBK0000232": {"Fund Names": {"Default": "DIF-Class 19 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000247": {"Fund Names": {"CDS": "DIF-Class 21 CDS Holding", "Default": "DIF-Class 21 Holding"}, "Password": "AAGCD0792B"}, "DBSBK0000178": {"Fund Names": {"Default": "DGF-Cell 8"}, "Password": "AAICD1968M"}, "BNPP00000458": {"Fund Names": {"Default": "DGF-Cell 9"}, "Password": "AAICD2891H"}, "DGF-Cell 10": {"Fund Names": {"Default": "DGF-Cell 10"}, "Password": "AAICD3412C"}, "BNPP00000480": {"Fund Names": {"Default": "DGF-Cell 11"}, "Password": "AAICD6359G"}, "BNPP00000488": {"Fund Names": {"Default": "DGF-Cell 13"}, "Password": "AAICD7821M"}, "BNPP00000540": {"Fund Names": {"Default": "DGF-Cell 16"}, "Password": "AAJCD5624K"}, "BNPP00000535": {"Fund Names": {"Default": "DGF-Cell 17"}, "Password": "AAJCD4991K"}, "DBSBK0000229": {"Fund Names": {"Default": "DGF-Cell 18"}, "Password": "AAJCD6205G"}, "DBSBK0000228": {"Fund Names": {"Default": "DGF-Cell 19"}, "Password": "AAJCD6049E"}, "DBSBK0000285": {"Fund Names": {"CDS": "DGF-Cell 23 CDS Holding", "Default": "DGF-Cell 23 Holding"}, "Password": "AAKCD6244Q"}, "DBSBK0000299": {"Fund Names": {"Default": "DGF-Cell 24 Holding"}, "Password": "AAKCD7324B"}, "DBSBK0000353": {"Fund Names": {"Default": "DGF-Cell 28 Holding"}, "Password": "AALCD1140J"}, "DBSBK0000354": {"Fund Names": {"Default": "DGF-Cell 29 Holding"}, "Password": "AALCD1141K"}, "DBSBK0000380": {"Fund Names": {"Default": "DGF-Cell 32 Holding"}, "Password": ""}, "DBSBK0000356": {"Fund Names": {"Default": "GlobalQ_AIF-III"}, "Password": ""}, "DGF-Cell 36": {"Fund Names": {"Default": "DGF-Cell 36"}, "Password": ""}, "DGF-Cell 38": {"Fund Names": {"Default": "DGF-Cell 38"}, "Password": ""}}
         
         # Default ASIO portfolio mapping
-        if dataset_name == "asio_portfolio_mapping":
+        if dataset_name == "asio_recon_portfolio_mapping":
             return {
                 "ASIO - SF 3": "THE ASIO FUND VCC - SUB-FUND 3",
                 "ASIO - SF 8_Golden": "THE ASIO FUND VCC - EMKAY BHARAT FUND - BHARATS GOLDEN DECADE",
@@ -1818,7 +1975,7 @@ class DataConfigPage(tk.Frame):
             }
         
         # Default Format 1 headers
-        if dataset_name == "asio_format_1_headers":
+        if dataset_name == "asio_recon_format_1_headers":
             return {
                 "CLN_CODE": "Cln Code",
                 "CLN_NAME": "Cln Name",
@@ -1841,7 +1998,7 @@ class DataConfigPage(tk.Frame):
             }
         
         # Default Format 2 headers
-        if dataset_name == "asio_format_2_headers":
+        if dataset_name == "asio_recon_format_2_headers":
             return {
                 "VALUE_DATE_AS_AT": "Value date as at",
                 "SERVICE_LOCATION": "Service location",
@@ -1865,7 +2022,7 @@ class DataConfigPage(tk.Frame):
             }
         
         # Default BhavCopy headers
-        if dataset_name == "asio_bhavcopy_headers":
+        if dataset_name == "asio_recon_bhavcopy_headers":
             return {
                 "TRADDT": "TradDt",
                 "BIZDT": "BizDt",
@@ -2257,9 +2414,10 @@ class DataConfigPage(tk.Frame):
         # Note: Use _get_location_account_from_trading_code() function in asio_sub_fund4.py to generate values dynamically
         if dataset_name == "asio_sf4_trading_code_mapping":
             return {
-                "FT": "Asio_Sub Fund_4_DBS_INR_8811210011631187",
-                "FT1": "Asio_Sub Fund_4_DBS_INR_8811210011631187_FT1",
-                "FT2": "Asio_Sub Fund_4_DBS_INR_8811210011631187_FT2"
+                "FT": "Asio_Sub Fund_4_OHM_FO_DBSBK0000289_FT",
+                "FT1": "Asio_Sub Fund_4_OHM_FO_DBSBK0000289_FT1",
+                "FT2": "Asio_Sub Fund_4_OHM_FO_DBSBK0000289_FT2",
+                "FT3": "Asio_Sub Fund_4_OHM_FO_DBSBK0000289_FT3"
             }
         
         # Default ASIO Sub Fund 4 read configuration
@@ -2268,6 +2426,14 @@ class DataConfigPage(tk.Frame):
                 "read_from_row": 1,
                 "read_from_column": "A"
             }
+        
+        # Default MCX Group2 Filters
+        if dataset_name == "mcx_group2_filters":
+            return ['Commodity Future Option', 'Commodity Option', 'Commodity Future']
+        
+        # Default FNO Group2 Filters
+        if dataset_name == "fno_group2_filters":
+            return ['Equity Option', 'Index Option', 'Index Future', 'Equity future']
         
         return {}
 
@@ -2282,9 +2448,9 @@ class DataConfigPage(tk.Frame):
                 with open(consolidated_path, "r") as f:
                     consolidated_data = json.load(f)
                     # Add datasets from consolidated file
-                for dataset_name in ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
-                                    "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_pricing_fno", "asio_pricing_mcx", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config"]:
+                for dataset_name in ["fund_filename_map", "asio_recon_portfolio_mapping", "asio_recon_format_1_headers", "asio_recon_format_2_headers", 
+                                    "asio_recon_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
+                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_pricing_fno", "asio_pricing_mcx", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config", "mcx_group2_filters", "fno_group2_filters"]:
                         if dataset_name in consolidated_data:
                             datasets[dataset_name] = consolidated_path
             
@@ -2302,9 +2468,9 @@ class DataConfigPage(tk.Frame):
             print(f"Dataset discovery failed: {e}")
         
         # Always include these datasets (loaded from consolidated_data.json or defaults)
-        for dataset_name in ["fund_filename_map", "asio_portfolio_mapping", "asio_format_1_headers", "asio_format_2_headers", 
-                            "asio_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                            "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "asio_sf_2_mcx_future_security", "geneva_custodian_mapping", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config"]:
+        for dataset_name in ["fund_filename_map", "asio_recon_portfolio_mapping", "asio_recon_format_1_headers", "asio_recon_format_2_headers", 
+                            "asio_recon_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
+                            "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "asio_sf_2_mcx_future_security", "geneva_custodian_mapping", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config", "mcx_group2_filters", "fno_group2_filters"]:
             if dataset_name not in datasets:
                 datasets[dataset_name] = consolidated_path  # All come from consolidated file
         
@@ -2321,9 +2487,9 @@ class DataConfigPage(tk.Frame):
             if dataset_name not in self.datasets:
                 self.datasets[dataset_name] = self._load_default_dataset_data(dataset_name)
         self.header_data = self.datasets.get(self.current_dataset_name, {})
-        # Update combobox options
+        # Update search values
         values = ["Lotsize", "UnderlyingCode"] + list(self.dataset_files.keys())
-        self.dataset_combo.configure(values=values)
+        self._all_dataset_values = values
         # Keep selection consistent in UI
         if self.mode_var.get() == "LOTSIZE":
             self.dataset_var.set("Lotsize")
@@ -2366,7 +2532,7 @@ class DataConfigPage(tk.Frame):
 
     def show_header_edit_dialog(self, field_name="", value=""):
         # Customize labels for different datasets
-        if self.current_dataset_name == "asio_portfolio_mapping":
+        if self.current_dataset_name == "asio_recon_portfolio_mapping":
             field_label = "Portfolio:"
             value_label = "Holding Name:"
             dialog_title = "Edit Portfolio Mapping" if field_name else "Add Portfolio Mapping"
@@ -2382,7 +2548,7 @@ class DataConfigPage(tk.Frame):
             field_label = "TM Code:"
             value_label = "TM Name:"
             dialog_title = "Edit MCX TM Code Mapping" if field_name else "Add MCX TM Code Mapping"
-        elif self.current_dataset_name in ["asio_format_1_headers", "asio_format_2_headers", "asio_bhavcopy_headers", "asio_geneva_headers"]:
+        elif self.current_dataset_name in ["asio_recon_format_1_headers", "asio_recon_format_2_headers", "asio_recon_bhavcopy_headers", "asio_geneva_headers"]:
             field_label = "Header Key:"
             value_label = "Header Name:"
             dialog_title = "Edit Header" if field_name else "Add Header"
@@ -2427,7 +2593,7 @@ class DataConfigPage(tk.Frame):
             new_field = field_entry.get().strip()
             raw = value_entry.get()
             if not new_field:
-                if self.current_dataset_name == "asio_portfolio_mapping":
+                if self.current_dataset_name == "asio_recon_portfolio_mapping":
                     error_msg = "Portfolio is required"
                 elif self.current_dataset_name == "geneva_custodian_mapping":
                     error_msg = "Fund name in Geneva is required"
@@ -2435,7 +2601,7 @@ class DataConfigPage(tk.Frame):
                     error_msg = "TM Code is required"
                 elif self.current_dataset_name == "mcx_tm_code_with_tm_name":
                     error_msg = "TM Code is required"
-                elif self.current_dataset_name in ["asio_format_1_headers", "asio_format_2_headers", "asio_bhavcopy_headers", "asio_geneva_headers"]:
+                elif self.current_dataset_name in ["asio_recon_format_1_headers", "asio_recon_format_2_headers", "asio_recon_bhavcopy_headers", "asio_geneva_headers"]:
                     error_msg = "Header Key is required"
                 else:
                     error_msg = "Field is required"
@@ -2475,6 +2641,65 @@ class DataConfigPage(tk.Frame):
         tk.Button(button_frame, text="Save", bg="#27ae60", fg="white", font=("Arial", 10, "bold"), relief="flat", padx=20, pady=5, command=save_changes).pack(side="left", padx=5)
         tk.Button(button_frame, text="Cancel", bg="#e74c3c", fg="white", font=("Arial", 10, "bold"), relief="flat", padx=20, pady=5, command=cancel_changes).pack(side="left", padx=5)
 
+    def show_filter_edit_dialog(self, index=None, filter_value=""):
+        """Edit dialog for list-type filter datasets"""
+        is_edit = index is not None
+        dialog_title = f"Edit {self.current_dataset_name.replace('_', ' ').title()}" if is_edit else f"Add {self.current_dataset_name.replace('_', ' ').title()}"
+        
+        dialog = tk.Toplevel(self)
+        dialog.title(dialog_title)
+        dialog.geometry("420x180")
+        dialog.configure(bg="#ecf0f1")
+        dialog.transient(self)
+        dialog.grab_set()
+        dialog.geometry("+%d+%d" % (self.winfo_rootx() + 50, self.winfo_rooty() + 50))
+        
+        # Filter value input
+        value_frame = tk.Frame(dialog, bg="#ecf0f1")
+        value_frame.pack(fill="x", padx=20, pady=20)
+        tk.Label(value_frame, text="Filter Value:", font=("Arial", 12), bg="#ecf0f1").pack(anchor="w")
+        value_entry = tk.Entry(value_frame, font=("Arial", 12), width=30)
+        value_entry.pack(fill="x", pady=5)
+        value_entry.insert(0, str(filter_value))
+        value_entry.focus()
+        
+        button_frame = tk.Frame(dialog, bg="#ecf0f1")
+        button_frame.pack(fill="x", padx=20, pady=20)
+        
+        def save_changes():
+            new_value = value_entry.get().strip()
+            if not new_value:
+                messagebox.showerror("Error", "Filter value is required")
+                return
+            
+            # Ensure dataset is a list
+            if self.current_dataset_name not in self.datasets:
+                self.datasets[self.current_dataset_name] = []
+            if not isinstance(self.datasets[self.current_dataset_name], list):
+                self.datasets[self.current_dataset_name] = []
+            
+            if is_edit and index is not None:
+                # Edit existing item
+                if 0 <= index < len(self.datasets[self.current_dataset_name]):
+                    self.datasets[self.current_dataset_name][index] = new_value
+                else:
+                    messagebox.showerror("Error", "Invalid index for editing")
+                    return
+            else:
+                # Add new item
+                self.datasets[self.current_dataset_name].append(new_value)
+            
+            self.header_data = self.datasets[self.current_dataset_name]
+            self.load_data()
+            self.auto_save()
+            dialog.destroy()
+        
+        def cancel_changes():
+            dialog.destroy()
+        
+        tk.Button(button_frame, text="Save", bg="#27ae60", fg="white", font=("Arial", 10, "bold"), relief="flat", padx=20, pady=5, command=save_changes).pack(side="left", padx=5)
+        tk.Button(button_frame, text="Cancel", bg="#e74c3c", fg="white", font=("Arial", 10, "bold"), relief="flat", padx=20, pady=5, command=cancel_changes).pack(side="left", padx=5)
+
     def configure_tree_for_mode(self):
         for col in self.tree["columns"]:
             try:
@@ -2508,12 +2733,20 @@ class DataConfigPage(tk.Frame):
             self.tree.column("Fund Name", width=200, anchor="w")
             self.tree.column("Fund CDS Name", width=200, anchor="w")
             self.tree.column("Password", width=120, anchor="w")
+        elif self.current_dataset_name in ["mcx_group2_filters", "fno_group2_filters"]:
+            # Special 2-column layout for list-type filter datasets
+            cols = ("Index", "Filter Value")
+            self.tree.configure(columns=cols)
+            self.tree.heading("Index", text="Sr No")
+            self.tree.heading("Filter Value", text="Filter Value")
+            self.tree.column("Index", width=80, anchor="center")
+            self.tree.column("Filter Value", width=400, anchor="w")
         else:
             cols = ("Header", "Value")
             self.tree.configure(columns=cols)
             
             # Customize column headers for different datasets
-            if self.current_dataset_name == "asio_portfolio_mapping":
+            if self.current_dataset_name == "asio_recon_portfolio_mapping":
                 self.tree.heading("Header", text="Portfolio")
                 self.tree.heading("Value", text="Holding Name")
             elif self.current_dataset_name == "geneva_custodian_mapping":

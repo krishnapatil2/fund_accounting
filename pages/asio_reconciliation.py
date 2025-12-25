@@ -268,9 +268,9 @@ class ASIOReconciliationPage(tk.Frame):
                 with open(consolidated_path, "r") as f:
                     consolidated_data = json.load(f)
                     return {
-                        'format_1': consolidated_data.get("asio_format_1_headers", {}),
-                        'format_2': consolidated_data.get("asio_format_2_headers", {}),
-                        'bhavcopy': consolidated_data.get("asio_bhavcopy_headers", {})
+                        'format_1': consolidated_data.get("asio_recon_format_1_headers", {}),
+                        'format_2': consolidated_data.get("asio_recon_format_2_headers", {}),
+                        'bhavcopy': consolidated_data.get("asio_recon_bhavcopy_headers", {})
                     }
         except Exception:
             pass
@@ -287,7 +287,7 @@ class ASIOReconciliationPage(tk.Frame):
             if os.path.exists(consolidated_path):
                 with open(consolidated_path, "r") as f:
                     consolidated_data = json.load(f)
-                    return consolidated_data.get("asio_portfolio_mapping", {})
+                    return consolidated_data.get("asio_recon_portfolio_mapping", {})
         except Exception:
             pass
         
@@ -554,7 +554,8 @@ class ASIOReconciliationPage(tk.Frame):
                                 
                                 # Calculate difference: Traded Quantity - Traded balance
                                 difference = traded_quantity - traded_balance
-                                
+                                # if difference == -297000000:
+                                #     breakpoint()
                                 # Create reconciled record
                                 record = {
                                     'Value date as at': holding_row['Value date as at'],

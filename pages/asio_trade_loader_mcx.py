@@ -4,16 +4,14 @@ import os
 import json
 import zipfile
 from datetime import datetime
-from openpyxl import load_workbook
-from openpyxl.utils.dataframe import dataframe_to_rows
-from openpyxl.styles import Alignment, Font, Border
 from decimal import Decimal
-from CONSTANTS import *
-import pandas as pd
 import threading
 
 from my_app.pages.loading import LoadingSpinner
-from .helper import output_save_in_template, multiple_excels_to_zip, read_file
+
+# LAZY IMPORTS - Heavy libraries imported only when needed (in methods)
+# This speeds up frame opening significantly
+# pandas, openpyxl, and CONSTANTS will be imported in methods when actually needed
 
 
 def _safe_decimal(value):
@@ -167,6 +165,9 @@ class ASIOTradeLoaderMCXPage(tk.Frame):
     # ---- Core processing ----
     def _process(self):
         """Process the file (CSV/XLS/XLSX) and populate table."""
+        # Lazy import heavy libraries only when processing (speeds up frame opening)
+        from .helper import read_file
+        
         # Clear table
         for it in self.tree.get_children():
             self.tree.delete(it)
@@ -289,6 +290,10 @@ class ASIOTradeLoaderMCXPage(tk.Frame):
               [Date, InstrumentType, BuySell, Qty, Price, TMCode, Securitiy Nmaes, 
                UnderlyingInvestment, StrikePrice, Option/Future Type, PutCallFlag, ExpireDate]
         """
+        # Lazy import pandas and constants (used in this method)
+        import pandas as pd
+        from CONSTANTS import TM_NAME_HEADERS, ASIO_SUB_FUND_2_MCX_FUTURE_SECURITY_HEADER, ASIO_SUB_FUND_2_MCX_OPTION_SECURITY_HEADER
+        
         left_table_data = []  # All trade records
         right_table_data = []  # Unique trade records based on "Securitiy Nmaes"
         asio_sub_fund_2_future = []
@@ -562,6 +567,10 @@ class ASIOTradeLoaderMCXPage(tk.Frame):
 
     def _export_excel(self):
         """Export data to Excel file."""
+        # Lazy import heavy libraries only when exporting
+        import pandas as pd
+        from openpyxl.styles import Font, Border
+        
         if not self.all_table_rows and not self.unique_table_rows:
             messagebox.showinfo("Nothing to export", "Process a file first.")
             return
@@ -610,6 +619,10 @@ class ASIOTradeLoaderMCXPage(tk.Frame):
 
     def _export_to_template(self):
         """Export data to template format (ZIP with Excel files grouped by TM code)."""
+        # Lazy import heavy libraries only when exporting
+        from CONSTANTS import TM_NAME_HEADERS, ASIO_SUB_FUND_2_MCX_OPTION_SECURITY_HEADER, ASIO_SUB_FUND_2_MCX_FUTURE_SECURITY_HEADER
+        from .helper import output_save_in_template, multiple_excels_to_zip
+        
         if not hasattr(self, 'data_by_tm_code') or not self.data_by_tm_code:
             messagebox.showinfo("Nothing to export", "Process a file first to generate template data.")
             return
@@ -619,7 +632,7 @@ class ASIOTradeLoaderMCXPage(tk.Frame):
             title="Save Template Data",
             defaultextension=".zip",
             filetypes=[["ZIP Files", "*.zip"]],
-            initialfile="ASIOTradeLoader_MCX.zip"
+            initialfile="MCX_ASIO_SF2_TradeLoader.zip"
         )
         if not out_path:
             return
@@ -667,7 +680,7 @@ class ASIOTradeLoaderMCXPage(tk.Frame):
                     return
                 
                 # Create zip file
-                zip_buffer = multiple_excels_to_zip(excel_files, "ASIOTradeLoader_MCX.zip")
+                zip_buffer = multiple_excels_to_zip(excel_files, "MCX_ASIO_SF2_TradeLoader.zip")
                 
                 # Save zip file
                 with open(out_path, 'wb') as f:

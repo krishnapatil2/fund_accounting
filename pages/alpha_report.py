@@ -49,7 +49,7 @@ class AlphaReportPage(tk.Frame):
 
         self.csv_path_var = tk.StringVar()
 
-        tk.Label(controls, text="Trade CSV:", font=("Arial", 11), bg="#ecf0f1", fg="#2c3e50").pack(side="left")
+        tk.Label(controls, text="Trade File:", font=("Arial", 11), bg="#ecf0f1", fg="#2c3e50").pack(side="left")
         tk.Entry(controls, textvariable=self.csv_path_var, width=60).pack(side="left", padx=8)
         tk.Button(controls, text="Browse", command=self._browse_csv, bg="#3498db", fg="white", relief="flat", padx=10, pady=4).pack(side="left")
 
@@ -58,7 +58,7 @@ class AlphaReportPage(tk.Frame):
         tk.Button(controls, text="Export to Template", command=self._export_to_template, bg="#d35400", fg="white", relief="flat", padx=14, pady=6, font=("Arial", 11, "bold")).pack(side="left", padx=10)
 
         # Status
-        self.status_var = tk.StringVar(value="Load a CSV and click Process")
+        self.status_var = tk.StringVar(value="Load a CSV/Excel file and click Process")
         tk.Label(self, textvariable=self.status_var, font=("Arial", 10), bg="#ecf0f1", fg="#7f8c8d").pack(fill="x", padx=20)
 
         # Split views
@@ -139,7 +139,16 @@ class AlphaReportPage(tk.Frame):
 
     # ---- UI handlers ----
     def _browse_csv(self):
-        path = filedialog.askopenfilename(title="Select Trade CSV", filetypes=[["CSV Files", "*.csv"], ["All Files", "*.*"]])
+        path = filedialog.askopenfilename(
+            title="Select Trade File", 
+            filetypes=[
+                ["CSV Files", "*.csv"], 
+                ["Excel Files", "*.xlsx *.xls"], 
+                ["XLSX Files", "*.xlsx"],
+                ["XLS Files", "*.xls"],
+                ["All Files", "*.*"]
+            ]
+        )
         if path:
             self.csv_path_var.set(path)
 
@@ -365,17 +374,47 @@ class AlphaReportPage(tk.Frame):
         buy_rate_key = headers.get('BUY_RATE')
         sell_qty_key = headers.get('SELL_QTY')
         sell_rate_key = headers.get('SELL_RATE')
-        csv_path = self.csv_path_var.get().strip()
-        if not csv_path or not os.path.exists(csv_path):
-            messagebox.showwarning("CSV Missing", "Please select a valid Trade CSV file.")
+        file_path = self.csv_path_var.get().strip()
+        if not file_path or not os.path.exists(file_path):
+            messagebox.showwarning("File Missing", "Please select a valid Trade file (CSV/Excel).")
             return
 
         try:
-            df_csv = pd.read_csv(csv_path, usecols=headers_values)
+            # Detect file extension and read accordingly
+            file_ext = os.path.splitext(file_path)[1].lower()
+            if file_ext == '.csv':
+                df_csv = pd.read_csv(file_path, usecols=headers_values)
+            elif file_ext == '.xlsx':
+                # Read first sheet of XLSX file using openpyxl
+                df_csv = pd.read_excel(file_path, usecols=headers_values, engine='openpyxl')
+            elif file_ext == '.xls':
+                # Read first sheet of XLS file (pandas will use xlrd if available)
+                try:
+                    df_csv = pd.read_excel(file_path, usecols=headers_values, engine='xlrd')
+                except ImportError:
+                    messagebox.showerror(
+                        "Missing Library", 
+                        "Reading .xls files requires the 'xlrd' library.\n"
+                        "Please install it using: pip install xlrd"
+                    )
+                    return
+            else:
+                messagebox.showerror("Error", f"Unsupported file format: {file_ext}\nPlease use CSV, XLS, or XLSX files.")
+                return
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to read CSV: {e}")
+            error_msg = str(e)
+            if "xlrd" in error_msg.lower() or "openpyxl" in error_msg.lower():
+                messagebox.showerror(
+                    "Library Error", 
+                    f"Failed to read file: {error_msg}\n\n"
+                    "For .xlsx files, ensure 'openpyxl' is installed: pip install openpyxl\n"
+                    "For .xls files, ensure 'xlrd' is installed: pip install xlrd"
+                )
+            else:
+                messagebox.showerror("Error", f"Failed to read file: {error_msg}")
             return
-       
+
+        # Process data
         for_trade, security_creation, aafspl_car_future_data, car_trade_loader_data, option_security_data = self._template_data(df_csv, date_key, scrip_key, buy_qty_key,
                             buy_rate_key,sell_qty_key,sell_rate_key,
                             lotsize_data, aafspl_car_future, option_security, car_trade_loader)
@@ -413,7 +452,7 @@ class AlphaReportPage(tk.Frame):
 
     def _export_excel(self):
         if not self.for_trade_rows and not self.security_creation_rows:
-            messagebox.showinfo("Nothing to export", "Process a CSV first.")
+            messagebox.showinfo("Nothing to export", "Process a file first.")
             return
 
         # Ask output path
@@ -432,7 +471,7 @@ class AlphaReportPage(tk.Frame):
             df_sec = pd.DataFrame(self.security_creation_rows, columns=["Scrip Name", "Underlying", "Expiry", "Strike Price", "Call Put Flag", "Trading Size"]) 
 
             with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
-                # Sheet 1: Original CSV (no bold headers, no borders)
+                # Sheet 1: Original Data (no bold headers, no borders)
                 df_csv = getattr(self, "_df_csv", None)
                 if df_csv is not None:
                     df_csv.to_excel(writer, sheet_name="Original_Data", index=False)
@@ -486,7 +525,7 @@ class AlphaReportPage(tk.Frame):
 
     def _export_to_template(self):
         if not hasattr(self, '_aafspl_car_future_data') or not hasattr(self, '_car_trade_loader_data') or not hasattr(self, '_option_security_data'):
-            messagebox.showinfo("Nothing to export", "Process a CSV first to generate template data.")
+            messagebox.showinfo("Nothing to export", "Process a file first to generate template data.")
             return
 
         # Ask output path for zip file
@@ -757,8 +796,25 @@ class AlphaReportPage(tk.Frame):
                     row[key] = value.strip()
 
             date = row.get(date_key)
-            date_obj = datetime.strptime(date, "%d-%b-%y")
-            formatted_date = date_obj.strftime("%d/%m/%Y")
+            # Handle both string dates (from CSV) and Timestamp objects (from Excel)
+            if date is None:
+                continue  # Skip rows with missing dates
+            elif isinstance(date, (pd.Timestamp, datetime)):
+                # Already a datetime object from Excel
+                date_obj = date if isinstance(date, datetime) else date.to_pydatetime()
+                formatted_date = date_obj.strftime("%d/%m/%Y")
+            elif isinstance(date, str):
+                # String date from CSV - parse it
+                date_obj = datetime.strptime(date, "%d-%b-%y")
+                formatted_date = date_obj.strftime("%d/%m/%Y")
+            else:
+                # Try to convert to string first, then parse
+                try:
+                    date_str = str(date)
+                    date_obj = datetime.strptime(date_str, "%d-%b-%y")
+                    formatted_date = date_obj.strftime("%d/%m/%Y")
+                except (ValueError, TypeError):
+                    continue  # Skip rows with unparseable dates
 
             buy_qty = _safe_decimal(row.get(buy_qty_key))
             sell_qty = _safe_decimal(row.get(sell_qty_key))

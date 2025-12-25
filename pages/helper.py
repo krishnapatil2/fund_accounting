@@ -9,6 +9,8 @@ import openpyxl
 import os
 import pandas as pd
 from datetime import datetime
+import math
+
 
 def output_save_in_template(data, headers, filename="Report.xlsx"):
     """
@@ -157,3 +159,20 @@ def parse_expiry_date(expiry_str):
     except ValueError:
         # Invalid date → return empty or raw (your choice)
         return ""
+    
+def is_missing(value):
+    # Case 1: None
+    if value is None:
+        return True
+
+    # Case 2: float NaN
+    if isinstance(value, float) and math.isnan(value):
+        return True
+
+    # Case 3: string checks
+    if isinstance(value, str):
+        val = value.strip().lower()
+        if val == "" or val in ("nan", "na", "null", "none"):
+            return True
+
+    return False

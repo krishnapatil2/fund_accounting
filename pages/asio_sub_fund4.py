@@ -10,9 +10,12 @@ import threading
 import csv
 import io
 import zipfile
+import re
+import tempfile
+import shutil
 
 from my_app.pages.loading import LoadingSpinner
-from my_app.pages.helper import output_save_in_template, multiple_excels_to_zip
+from my_app.pages.helper import output_save_in_template, multiple_excels_to_zip, is_missing
 
 from my_app.CONSTANTS import (
     RECORDTYPE, TradeQuantity, sub_fund_4_headers, keep_blank_for_headers,
@@ -192,9 +195,35 @@ class ASIOSubFund4Page(tk.Frame):
         divider1 = tk.Frame(main_container, bg="#e0e0e0", height=1)
         divider1.pack(fill="x", pady=(25, 25))
 
-        # ========== Date Input ==========
+        # ========== Bulk Processing Checkbox (above Date Selection) ==========
+        bulk_frame = tk.Frame(main_container, bg="#ffffff")
+        bulk_frame.pack(fill="x", pady=(0, 20))
+        
+        self.bulk_var = tk.BooleanVar(value=False)
+        bulk_checkbox = tk.Checkbutton(
+            bulk_frame,
+            text="Bulk Processing (ZIP files with automatic date extraction)",
+            variable=self.bulk_var,
+            font=("Arial", 11),
+            bg="#ffffff",
+            fg="#34495e",
+            activebackground="#ffffff",
+            activeforeground="#34495e",
+            selectcolor="#ffffff",
+            cursor="hand2"
+        )
+        bulk_checkbox.pack(side="left")
+
+        # ========== Container for Date Selection and File Reading (side by side) ==========
+        date_reading_container = tk.Frame(main_container, bg="#ffffff")
+        date_reading_container.pack(fill="x", pady=(0, 25))
+
+        # ========== Date Input (Left Side) ==========
+        date_left_container = tk.Frame(date_reading_container, bg="#ffffff")
+        date_left_container.pack(side="left", fill="both", expand=True, padx=(0, 30))
+        
         date_title = tk.Label(
-            main_container,
+            date_left_container,
             text="📅 Date Selection",
             font=("Arial", 14, "bold"),
             bg="#ffffff",
@@ -204,10 +233,10 @@ class ASIOSubFund4Page(tk.Frame):
         date_title.pack(fill="x", pady=(0, 15))
 
         # Date fields row
-        date_row = tk.Frame(main_container, bg="#ffffff")
-        date_row.pack(fill="x", pady=(0, 25))
+        date_row = tk.Frame(date_left_container, bg="#ffffff")
+        date_row.pack(fill="x", pady=(0, 0))
 
-        # Event Date
+        # Event Date - create DateEntry widgets asynchronously for instant frame opening
         event_date_frame = tk.Frame(date_row, bg="#ffffff")
         event_date_frame.pack(side="left", padx=(0, 30))
         tk.Label(
@@ -217,37 +246,10 @@ class ASIOSubFund4Page(tk.Frame):
             bg="#ffffff",
             fg="#34495e"
         ).pack(side="top", pady=(0, 8))
-        self.event_date_entry = DateEntry(
-            event_date_frame,
-            width=18,
-            background="#3498db",
-            foreground="white",
-            borderwidth=2,
-            date_pattern='dd/MM/yyyy',
-            font=("Arial", 10)
-        )
-        self.event_date_entry.pack(side="top")
+        # Store frame reference for async widget creation
+        self._event_date_frame = event_date_frame
+        self.event_date_entry = None
         
-        # Hook into the calendar selection by overriding the _select_calendar method
-        # Store original method if it exists
-        original_select = getattr(self.event_date_entry, '_select_calendar', None)
-        
-        def wrapped_select(sel_date):
-            # Call original method if it exists
-            if original_select:
-                original_select(sel_date)
-            # Update other dates
-            self._on_event_date_change()
-        
-        # Replace the method
-        self.event_date_entry._select_calendar = wrapped_select
-        
-        # Also bind to focus out event as backup (when user types date manually)
-        self.event_date_entry.bind("<FocusOut>", lambda e: self._on_event_date_change())
-        
-        # Try to access and bind to the calendar widget directly
-        self.after(100, self._setup_calendar_binding)
-
         # Settlement Date
         settlement_date_frame = tk.Frame(date_row, bg="#ffffff")
         settlement_date_frame.pack(side="left", padx=(0, 30))
@@ -258,16 +260,8 @@ class ASIOSubFund4Page(tk.Frame):
             bg="#ffffff",
             fg="#34495e"
         ).pack(side="top", pady=(0, 8))
-        self.settlement_date_entry = DateEntry(
-            settlement_date_frame,
-            width=18,
-            background="#3498db",
-            foreground="white",
-            borderwidth=2,
-            date_pattern='dd/MM/yyyy',
-            font=("Arial", 10)
-        )
-        self.settlement_date_entry.pack(side="top")
+        self._settlement_date_frame = settlement_date_frame
+        self.settlement_date_entry = None
 
         # Actual Date
         actual_date_frame = tk.Frame(date_row, bg="#ffffff")
@@ -279,24 +273,18 @@ class ASIOSubFund4Page(tk.Frame):
             bg="#ffffff",
             fg="#34495e"
         ).pack(side="top", pady=(0, 8))
-        self.actual_date_entry = DateEntry(
-            actual_date_frame,
-            width=18,
-            background="#3498db",
-            foreground="white",
-            borderwidth=2,
-            date_pattern='dd/MM/yyyy',
-            font=("Arial", 10)
-        )
-        self.actual_date_entry.pack(side="top")
+        self._actual_date_frame = actual_date_frame
+        self.actual_date_entry = None
+        
+        # Create DateEntry widgets asynchronously (DateEntry creation is slow - this avoids blocking)
+        self.after_idle(self._create_date_entries_async)
 
-        # Divider line
-        divider2 = tk.Frame(main_container, bg="#e0e0e0", height=1)
-        divider2.pack(fill="x", pady=(0, 25))
-
-        # ========== File Reading ==========
+        # ========== File Reading (Right Side) ==========
+        reading_right_container = tk.Frame(date_reading_container, bg="#ffffff")
+        reading_right_container.pack(side="right", fill="both", expand=True)
+        
         reading_title = tk.Label(
-            main_container,
+            reading_right_container,
             text="⚙️ File Reading Configuration",
             font=("Arial", 14, "bold"),
             bg="#ffffff",
@@ -306,8 +294,8 @@ class ASIOSubFund4Page(tk.Frame):
         reading_title.pack(fill="x", pady=(0, 15))
 
         # Number inputs row
-        reading_row = tk.Frame(main_container, bg="#ffffff")
-        reading_row.pack(fill="x", pady=(0, 25))
+        reading_row = tk.Frame(reading_right_container, bg="#ffffff")
+        reading_row.pack(fill="x", pady=(0, 0))
 
         # Read From Row
         read_row_frame = tk.Frame(reading_row, bg="#ffffff")
@@ -319,10 +307,11 @@ class ASIOSubFund4Page(tk.Frame):
             bg="#ffffff",
             fg="#34495e"
         ).pack(side="top", pady=(0, 8))
-        # Load saved read configuration
-        read_config = self._load_read_config()
-        default_read_row = str(read_config.get("read_from_row", 1))
-        default_read_col = read_config.get("read_from_column", "A")
+        # Load saved read configuration (lazy load - use defaults initially)
+        # Load config in background to avoid blocking UI
+        self._read_config_cache = None
+        default_read_row = "1"
+        default_read_col = "A"
         
         self.read_row_var = tk.StringVar(value=default_read_row)
         read_row_entry = tk.Entry(
@@ -378,9 +367,61 @@ class ASIOSubFund4Page(tk.Frame):
         read_row_entry.config(validate="key", validatecommand=(self.register(self._validate_number), "%P"))
         read_col_entry.config(validate="key", validatecommand=(self.register(self._validate_column_letter), "%P"))
 
-        # File Reading Fallback checkbox
-        fallback_frame = tk.Frame(main_container, bg="#ffffff")
-        fallback_frame.pack(fill="x", pady=(15, 0))
+        # ========== Container for Output Format and File Reading Fallback (side by side) ==========
+        output_fallback_container = tk.Frame(main_container, bg="#ffffff")
+        output_fallback_container.pack(fill="x", pady=(5, 0))
+
+        # Output Format checkboxes (Left Side)
+        output_format_frame = tk.Frame(output_fallback_container, bg="#ffffff")
+        output_format_frame.pack(side="left", fill="x", expand=True)
+        
+        tk.Label(
+            output_format_frame,
+            text="Output Format:",
+            font=("Arial", 11, "bold"),
+            bg="#ffffff",
+            fg="#34495e"
+        ).pack(side="left", padx=(0, 15))
+        
+        self.export_excel_var = tk.BooleanVar(value=False)
+        excel_checkbox = tk.Checkbutton(
+            output_format_frame,
+            text="Excel (.xlsx)",
+            variable=self.export_excel_var,
+            font=("Arial", 11),
+            bg="#ffffff",
+            fg="#34495e",
+            activebackground="#ffffff",
+            activeforeground="#34495e",
+            selectcolor="#ffffff",
+            cursor="hand2"
+        )
+        excel_checkbox.pack(side="left", padx=(0, 15))
+        
+        self.export_csv_var = tk.BooleanVar(value=True)
+        csv_checkbox = tk.Checkbutton(
+            output_format_frame,
+            text="CSV (.csv)",
+            variable=self.export_csv_var,
+            font=("Arial", 11),
+            bg="#ffffff",
+            fg="#34495e",
+            activebackground="#ffffff",
+            activeforeground="#34495e",
+            selectcolor="#ffffff",
+            cursor="hand2"
+        )
+        csv_checkbox.pack(side="left")
+
+        # File Reading Fallback checkbox (Right Side, aligned with Read From Row)
+        # Align with Read From Row by matching the right container structure
+        # Since reading_right_container is packed side="right" and read_row_frame starts at its left edge,
+        # we need to match that alignment. Use a spacer frame that matches reading_right_container width behavior
+        fallback_spacer = tk.Frame(output_fallback_container, bg="#ffffff")
+        fallback_spacer.pack(side="right", fill="both", expand=True)
+        
+        fallback_frame = tk.Frame(fallback_spacer, bg="#ffffff")
+        fallback_frame.pack(side="left", padx=(170, 0))
         
         self.fallback_var = tk.BooleanVar(value=False)
         fallback_checkbox = tk.Checkbutton(
@@ -396,48 +437,6 @@ class ASIOSubFund4Page(tk.Frame):
             cursor="hand2"
         )
         fallback_checkbox.pack(side="left")
-
-        # Output Format checkboxes
-        output_format_frame = tk.Frame(main_container, bg="#ffffff")
-        output_format_frame.pack(fill="x", pady=(15, 0))
-        
-        tk.Label(
-            output_format_frame,
-            text="Output Format:",
-            font=("Arial", 11, "bold"),
-            bg="#ffffff",
-            fg="#34495e"
-        ).pack(side="left", padx=(0, 15))
-        
-        self.export_excel_var = tk.BooleanVar(value=True)
-        excel_checkbox = tk.Checkbutton(
-            output_format_frame,
-            text="Excel (.xlsx)",
-            variable=self.export_excel_var,
-            font=("Arial", 11),
-            bg="#ffffff",
-            fg="#34495e",
-            activebackground="#ffffff",
-            activeforeground="#34495e",
-            selectcolor="#ffffff",
-            cursor="hand2"
-        )
-        excel_checkbox.pack(side="left", padx=(0, 15))
-        
-        self.export_csv_var = tk.BooleanVar(value=False)
-        csv_checkbox = tk.Checkbutton(
-            output_format_frame,
-            text="CSV (.csv)",
-            variable=self.export_csv_var,
-            font=("Arial", 11),
-            bg="#ffffff",
-            fg="#34495e",
-            activebackground="#ffffff",
-            activeforeground="#34495e",
-            selectcolor="#ffffff",
-            cursor="hand2"
-        )
-        csv_checkbox.pack(side="left")
 
         # Divider line before submit
         divider3 = tk.Frame(main_container, bg="#e0e0e0", height=1)
@@ -528,16 +527,27 @@ class ASIOSubFund4Page(tk.Frame):
             pass
 
     def _browse_files(self):
-        """Browse and select xls, xlsx, csv files."""
-        files = filedialog.askopenfilenames(
-            title="Select Files",
-            filetypes=[
-                ("All Supported Files", "*.xls *.xlsx *.csv"),
-                ("Excel Files", "*.xls *.xlsx"),
-                ("CSV Files", "*.csv"),
-                ("All Files", "*.*")
-            ]
-        )
+        """Browse and select xls, xlsx, csv files, or zip files if bulk mode is enabled."""
+        if self.bulk_var.get():
+            # Bulk mode: allow all files (user can select zip files)
+            files = filedialog.askopenfilenames(
+                title="Select ZIP Files",
+                filetypes=[
+                    ("All Files", "*.*"),
+                    ("ZIP Files", "*.zip")
+                ]
+            )
+        else:
+            # Normal mode: allow Excel and CSV files
+            files = filedialog.askopenfilenames(
+                title="Select Files",
+                filetypes=[
+                    ("All Supported Files", "*.xls *.xlsx *.csv"),
+                    ("Excel Files", "*.xls *.xlsx"),
+                    ("CSV Files", "*.csv"),
+                    ("All Files", "*.*")
+                ]
+            )
 
         if files:
             for file_path in files:
@@ -601,6 +611,9 @@ class ASIOSubFund4Page(tk.Frame):
         Changes to Settlement Date or Actual Date do not affect Event Date.
         """
         try:
+            # Check if widgets are created
+            if not (self.event_date_entry and self.settlement_date_entry and self.actual_date_entry):
+                return
             # Get the selected date from Event Date
             event_date = self.event_date_entry.get_date()
             
@@ -611,6 +624,76 @@ class ASIOSubFund4Page(tk.Frame):
                 self.actual_date_entry.set_date(event_date)
         except Exception:
             # Silently ignore errors (e.g., if dates are not yet initialized)
+            pass
+    
+    def _create_date_entries_async(self):
+        """Create DateEntry widgets asynchronously after frame is shown - this avoids blocking initialization."""
+        try:
+            # Event Date
+            self.event_date_entry = DateEntry(
+                self._event_date_frame,
+                width=18,
+                background="#3498db",
+                foreground="white",
+                borderwidth=2,
+                date_pattern='dd/MM/yyyy',
+                font=("Arial", 10)
+            )
+            self.event_date_entry.pack(side="top")
+            
+            # Settlement Date
+            self.settlement_date_entry = DateEntry(
+                self._settlement_date_frame,
+                width=18,
+                background="#3498db",
+                foreground="white",
+                borderwidth=2,
+                date_pattern='dd/MM/yyyy',
+                font=("Arial", 10)
+            )
+            self.settlement_date_entry.pack(side="top")
+            
+            # Actual Date
+            self.actual_date_entry = DateEntry(
+                self._actual_date_frame,
+                width=18,
+                background="#3498db",
+                foreground="white",
+                borderwidth=2,
+                date_pattern='dd/MM/yyyy',
+                font=("Arial", 10)
+            )
+            self.actual_date_entry.pack(side="top")
+            
+            # Now set up bindings
+            self._setup_date_entry_bindings()
+            self.after(50, self._setup_calendar_binding)
+            self.after(100, self._lazy_load_read_config)
+        except Exception:
+            pass
+    
+    def _setup_date_entry_bindings(self):
+        """Set up date entry bindings (non-blocking)."""
+        try:
+            if not self.event_date_entry:
+                return
+            # Hook into the calendar selection by overriding the _select_calendar method
+            # Store original method if it exists
+            original_select = getattr(self.event_date_entry, '_select_calendar', None)
+            
+            def wrapped_select(sel_date):
+                # Call original method if it exists
+                if original_select:
+                    original_select(sel_date)
+                # Update other dates
+                self._on_event_date_change()
+            
+            # Replace the method
+            self.event_date_entry._select_calendar = wrapped_select
+            
+            # Also bind to focus out event as backup (when user types date manually)
+            self.event_date_entry.bind("<FocusOut>", lambda e: self._on_event_date_change())
+        except Exception:
             pass
     
     def _setup_calendar_binding(self):
@@ -625,7 +708,11 @@ class ASIOSubFund4Page(tk.Frame):
             pass
     
     def _load_read_config(self):
-        """Load read configuration from consolidated_data.json."""
+        """Load read configuration from consolidated_data.json (cached)."""
+        # Return cached config if available
+        if self._read_config_cache is not None:
+            return self._read_config_cache
+        
         try:
             from my_app.file_utils import get_app_directory
             app_dir = get_app_directory()
@@ -635,12 +722,31 @@ class ASIOSubFund4Page(tk.Frame):
                 with open(consolidated_path, "r", encoding="utf-8") as f:
                     consolidated_data = json.load(f)
                     read_config = consolidated_data.get("asio_sub_fund4_read_config", {})
+                    # Cache the config
+                    self._read_config_cache = read_config
                     return read_config
         except Exception:
             pass
         
         # Return default if loading fails
-        return {"read_from_row": 1, "read_from_column": "A"}
+        default_config = {"read_from_row": 1, "read_from_column": "A"}
+        self._read_config_cache = default_config
+        return default_config
+    
+    def _lazy_load_read_config(self):
+        """Lazy load read config and update UI fields if different from defaults."""
+        try:
+            read_config = self._load_read_config()
+            saved_row = str(read_config.get("read_from_row", 1))
+            saved_col = read_config.get("read_from_column", "A")
+            
+            # Only update if current values are defaults and saved values differ
+            if self.read_row_var.get() == "1" and saved_row != "1":
+                self.read_row_var.set(saved_row)
+            if self.read_col_var.get() == "A" and saved_col != "A":
+                self.read_col_var.set(saved_col)
+        except Exception:
+            pass  # Silently fail - defaults are already set
     
     def _save_read_config(self, read_row, read_col_letter):
         """Save read configuration to consolidated_data.json."""
@@ -685,6 +791,65 @@ class ASIOSubFund4Page(tk.Frame):
         for char in column_letter:
             result = result * 26 + (ord(char) - ord('A') + 1)
         return result - 1  # Convert to 0-based index
+    
+    def _extract_date_from_zip_filename(self, zip_filename):
+        """Extract date from zip filename in DDMMYYYY format.
+        
+        Args:
+            zip_filename: Zip filename (e.g., "FT TRADES  _02122025.zip" or "Fw_ FT TRADES  _01122025.zip")
+        
+        Returns:
+            datetime: Parsed date object, or None if extraction fails
+        """
+        try:
+            # Look for 8-digit date pattern (DDMMYYYY) in filename
+            # Pattern: 8 consecutive digits
+            match = re.search(r'(\d{8})', zip_filename)
+            if match:
+                date_str = match.group(1)
+                # Parse as DDMMYYYY
+                day = int(date_str[0:2])
+                month = int(date_str[2:4])
+                year = int(date_str[4:8])
+                return datetime(year, month, day)
+        except Exception:
+            pass
+        return None
+    
+    def _extract_files_from_zip(self, zip_path, temp_dir):
+        """Extract Excel and CSV files from zip archive.
+        
+        Args:
+            zip_path: Path to zip file
+            temp_dir: Temporary directory to extract files to
+        
+        Returns:
+            list: List of extracted file paths [(file_path, is_excel), ...]
+        """
+        extracted_files = []
+        try:
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                # Extract all files to temp directory
+                zip_ref.extractall(temp_dir)
+                
+                # Get list of extracted files
+                for member in zip_ref.namelist():
+                    # Skip directories
+                    if member.endswith('/'):
+                        continue
+                    
+                    extracted_path = os.path.join(temp_dir, member)
+                    if os.path.exists(extracted_path):
+                        # Check file extension
+                        ext = os.path.splitext(extracted_path)[1].lower()
+                        if ext in ['.xls', '.xlsx']:
+                            extracted_files.append((extracted_path, True))  # is_excel = True
+                        elif ext == '.csv':
+                            extracted_files.append((extracted_path, False))  # is_excel = False
+        except Exception as e:
+            raise Exception(f"Failed to extract zip file {os.path.basename(zip_path)}: {e}")
+        
+        return extracted_files
     
     def read_dynamic_file(
             self,
@@ -799,13 +964,9 @@ class ASIOSubFund4Page(tk.Frame):
         Returns:
             str: Location account value
         """
-        base_location = "Asio_Sub Fund_4_DBS_INR_8811210011631187"
+        base_location = "Asio_Sub Fund_4_OHM_FO_DBSBK0000289"
         
-        # If key is "FT", return base location without suffix
-        if trading_code_key == "FT":
-            return base_location
-        
-        # For FT1, FT2, FT3, etc., append the key as suffix
+        # For all keys including FT, append the key as suffix
         return f"{base_location}_{trading_code_key}"
     
     def concatenate_security_name(self, row):
@@ -854,6 +1015,17 @@ class ASIOSubFund4Page(tk.Frame):
                 strike = str(int(row["StrikePrice"]))
         except Exception as e:
             raise Exception(f"Error processing StrikePrice: {e}")
+
+        try:
+            instrument = str(row.get("Instrument")).strip()
+            if strike == "0" and option_type.strip() == "":
+                option_type = instrument[0] # F
+                # this when instrument is balnk or none or any other value which is not incorrect
+                # value_is_missing = is_missing(instrument)
+                # if value_is_missing:
+                #     option_type = "F"
+        except Exception as e:
+            raise Exception(f"Error processing Instrument: {e}")
 
         return f"NSE{symbol}{expiry}{option_type}{strike}"
 
@@ -909,6 +1081,8 @@ class ASIOSubFund4Page(tk.Frame):
             
             # Special handling for RecordType
             if header == RECORDTYPE:
+                # if security_name == "NSENIFTY20251230n0":
+                #     breakpoint()
                 if columns and BuySellIndicator in columns:
                     buy_sell_value = row.get(BuySellIndicator, "")
                     if buy_sell_value is not None:
@@ -1030,55 +1204,6 @@ class ASIOSubFund4Page(tk.Frame):
             self.status_var.set("Error: No files selected")
             return
 
-        # Validate dates
-        try:
-            event_date = self.event_date_entry.get_date()
-            settlement_date = self.settlement_date_entry.get_date()
-            actual_date = self.actual_date_entry.get_date()
-        except Exception as e:
-            messagebox.showerror("Error", f"Invalid date selection: {str(e)}")
-            self.status_var.set("Error: Invalid date")
-            return
-
-        # Validate row and column inputs
-        # Check if fallback checkbox is checked
-        if self.fallback_var.get():
-            # Use fallback values: Row 10, Column B
-            read_row = 10
-            column_letter = "B"
-            read_col = self._column_letter_to_index(column_letter)
-        else:
-            # Use values from input fields
-            try:
-                read_row = int(self.read_row_var.get())
-                
-                if read_row < 1:
-                    messagebox.showwarning("Warning", "Read From Row must be at least 1")
-                    return
-                
-                # Convert column letter to index
-                column_letter = self.read_col_var.get().strip().upper()
-                if not column_letter:
-                    messagebox.showwarning("Warning", "Please enter a valid column letter (A, B, C, etc.)")
-                    return
-                
-                read_col = self._column_letter_to_index(column_letter)
-                
-                if read_col < 0:
-                    messagebox.showwarning("Warning", "Invalid column letter. Please use A-Z or AA-ZZ format.")
-                    return
-                
-                # Save read configuration for next time (only if not using fallback)
-                self._save_read_config(read_row, column_letter)
-            except ValueError:
-                messagebox.showerror("Error", "Read From Row must be a valid number")
-                self.status_var.set("Error: Invalid row value")
-                return
-            except Exception as e:
-                messagebox.showerror("Error", f"Invalid column input: {str(e)}")
-                self.status_var.set("Error: Invalid column value")
-                return
-
         # Process the submission
         self.status_var.set("Processing... Please wait")
         
@@ -1105,64 +1230,419 @@ class ASIOSubFund4Page(tk.Frame):
             self.status_var.set(f"Error: Failed to load configurations")
             return
         
-        # Dynamic dictionary to store data by trading code (shared across all files)
-        self.loader_data = defaultdict(list)
-        
         # Process all files in the list
         total_rows_processed = 0
         total_files_processed = 0
+        temp_dirs = []  # Track temp directories for cleanup
         
         try:
-            for file_index, file_path in enumerate(self.selected_files):
-                self.status_var.set(f"Processing file {file_index + 1}/{len(self.selected_files)}: {os.path.basename(file_path)}")
-                
-                # Read file with correct parameters:
-                # header_row: 1-based row number where headers are (use read_row)
-                # header_start_col: 0-based column index where headers start (use read_col)
-                df = self.read_dynamic_file(
-                    file_path=file_path,
-                    header_row=read_row,  # Row number (1-based) where header is located
-                    header_start_col=read_col,  # Column index (0-based) where headers start
-                    sheet_name=0
-                )
-                
-                # Process each row in the current file
-                for index, row in df.iterrows():
-                    try:
-                        trading_code = str(row.get(TradingCode, "")).strip()
-                    except Exception as e:
-                        raise Exception(f"Error getting TradingCode at row {index} in file {os.path.basename(file_path)}: {e}")
+            # Check if bulk processing mode is enabled
+            if self.bulk_var.get():
+                # Bulk processing mode: process zip files separately
+                for zip_index, zip_path in enumerate(self.selected_files):
+                    zip_filename = os.path.basename(zip_path)
+                    self.status_var.set(f"Processing ZIP {zip_index + 1}/{len(self.selected_files)}: {zip_filename}")
                     
-                    try:
-                        # Use single asio_sf4_ft config for all trading codes
-                        # LocationAccount will be set dynamically based on trading code
-                        # Pass dates and DataFrame columns
-                        data_row = self._prepare_data_row(
-                            row, 
-                            asio_sf4_ft_config, 
-                            trading_code, 
-                            trading_code_mapping, 
-                            columns=df.columns.tolist(),
-                            event_date=event_date,
-                            settlement_date=settlement_date,
-                            actual_date=actual_date
+                    # Extract date from zip filename
+                    extracted_date = self._extract_date_from_zip_filename(zip_filename)
+                    if not extracted_date:
+                        raise Exception(f"Could not extract date from zip filename: {zip_filename}")
+                    
+                    # Use extracted date for all three date fields
+                    event_date = extracted_date
+                    settlement_date = extracted_date
+                    actual_date = extracted_date
+                    
+                    # Format date string for output filename
+                    event_date_str = extracted_date.strftime("%d%m%Y")
+                    
+                    # Create temporary directory for this zip
+                    temp_dir = tempfile.mkdtemp()
+                    temp_dirs.append(temp_dir)
+                    
+                    # Extract files from zip
+                    extracted_files = self._extract_files_from_zip(zip_path, temp_dir)
+                    
+                    if not extracted_files:
+                        raise Exception(f"No Excel or CSV files found in zip: {zip_filename}")
+                    
+                    # Process data for this zip only (separate loader_data per zip)
+                    zip_loader_data = defaultdict(list)
+                    
+                    # Process each extracted file
+                    for file_path, is_excel in extracted_files:
+                        self.status_var.set(f"Processing {os.path.basename(file_path)} from {zip_filename}")
+                        
+                        # Set read parameters based on file type
+                        if is_excel:
+                            # Excel: Row 10, Column B
+                            read_row = 10
+                            read_col = self._column_letter_to_index("B")
+                        else:
+                            # CSV: Row 1, Column A
+                            read_row = 1
+                            read_col = self._column_letter_to_index("A")
+                        
+                        # Read file
+                        df = self.read_dynamic_file(
+                            file_path=file_path,
+                            header_row=read_row,
+                            header_start_col=read_col,
+                            sheet_name=0
                         )
-                    except Exception as e:
-                        raise Exception(f"Error in _prepare_data_row at row {index} in file {os.path.basename(file_path)}: {e}")
+                        
+                        # Process each row
+                        for index, row in df.iterrows():
+                            try:
+                                trading_code = str(row.get(TradingCode, "")).strip()
+                            except Exception as e:
+                                raise Exception(f"Error getting TradingCode at row {index} in file {os.path.basename(file_path)}: {e}")
+                            
+                            try:
+                                data_row = self._prepare_data_row(
+                                    row, 
+                                    asio_sf4_ft_config, 
+                                    trading_code, 
+                                    trading_code_mapping, 
+                                    columns=df.columns.tolist(),
+                                    event_date=event_date,
+                                    settlement_date=settlement_date,
+                                    actual_date=actual_date
+                                )
+                            except Exception as e:
+                                raise Exception(f"Error in _prepare_data_row at row {index} in file {os.path.basename(file_path)}: {e}")
 
-                    self.loader_data[trading_code].append(data_row)
-                    total_rows_processed += 1
+                            zip_loader_data[trading_code].append(data_row)
+                            total_rows_processed += 1
+                        
+                        total_files_processed += 1
+                    
+                    # Create output files for this zip and save as separate ZIP file
+                    self._export_zip_to_separate_zip(
+                        zip_loader_data, 
+                        event_date_str,
+                        zip_filename,
+                        zip_index + 1,
+                        len(self.selected_files)
+                    )
                 
-                total_files_processed += 1
+                # Cleanup temporary directories
+                for temp_dir in temp_dirs:
+                    try:
+                        shutil.rmtree(temp_dir)
+                    except Exception:
+                        pass  # Ignore cleanup errors
+                
+                self.status_var.set(f"Processed {len(self.selected_files)} ZIP file(s) - {total_rows_processed} total rows processed")
+                return
+            else:
+                # Normal processing mode: process individual files
+                # Validate dates (ensure widgets are created)
+                if not (self.event_date_entry and self.settlement_date_entry and self.actual_date_entry):
+                    # Wait a moment for async creation
+                    self.update_idletasks()
+                    if not (self.event_date_entry and self.settlement_date_entry and self.actual_date_entry):
+                        messagebox.showerror("Error", "Date widgets are still initializing. Please wait a moment.")
+                        self.status_var.set("Error: Date widgets not ready")
+                        return
+                try:
+                    event_date = self.event_date_entry.get_date()
+                    settlement_date = self.settlement_date_entry.get_date()
+                    actual_date = self.actual_date_entry.get_date()
+                except Exception as e:
+                    messagebox.showerror("Error", f"Invalid date selection: {str(e)}")
+                    self.status_var.set("Error: Invalid date")
+                    return
+
+                # Validate row and column inputs
+                # Check if fallback checkbox is checked
+                if self.fallback_var.get():
+                    # Use fallback values: Row 10, Column B
+                    read_row = 10
+                    column_letter = "B"
+                    read_col = self._column_letter_to_index(column_letter)
+                else:
+                    # Use values from input fields
+                    try:
+                        read_row = int(self.read_row_var.get())
+                        
+                        if read_row < 1:
+                            messagebox.showwarning("Warning", "Read From Row must be at least 1")
+                            return
+                        
+                        # Convert column letter to index
+                        column_letter = self.read_col_var.get().strip().upper()
+                        if not column_letter:
+                            messagebox.showwarning("Warning", "Please enter a valid column letter (A, B, C, etc.)")
+                            return
+                        
+                        read_col = self._column_letter_to_index(column_letter)
+                        
+                        if read_col < 0:
+                            messagebox.showwarning("Warning", "Invalid column letter. Please use A-Z or AA-ZZ format.")
+                            return
+                        
+                        # Save read configuration for next time (only if not using fallback)
+                        self._save_read_config(read_row, column_letter)
+                    except ValueError:
+                        messagebox.showerror("Error", "Read From Row must be a valid number")
+                        self.status_var.set("Error: Invalid row value")
+                        return
+                    except Exception as e:
+                        messagebox.showerror("Error", f"Invalid column input: {str(e)}")
+                        self.status_var.set("Error: Invalid column value")
+                        return
+                
+                # Process individual files
+                for file_index, file_path in enumerate(self.selected_files):
+                    self.status_var.set(f"Processing file {file_index + 1}/{len(self.selected_files)}: {os.path.basename(file_path)}")
+                    
+                    # Read file with correct parameters:
+                    # header_row: 1-based row number where headers are (use read_row)
+                    # header_start_col: 0-based column index where headers start (use read_col)
+                    df = self.read_dynamic_file(
+                        file_path=file_path,
+                        header_row=read_row,  # Row number (1-based) where header is located
+                        header_start_col=read_col,  # Column index (0-based) where headers start
+                        sheet_name=0
+                    )
+                    
+                    # Process each row in the current file
+                    for index, row in df.iterrows():
+                        try:
+                            trading_code = str(row.get(TradingCode, "")).strip()
+                        except Exception as e:
+                            raise Exception(f"Error getting TradingCode at row {index} in file {os.path.basename(file_path)}: {e}")
+                        
+                        try:
+                            # Use single asio_sf4_ft config for all trading codes
+                            # LocationAccount will be set dynamically based on trading code
+                            # Pass dates and DataFrame columns
+                            data_row = self._prepare_data_row(
+                                row, 
+                                asio_sf4_ft_config, 
+                                trading_code, 
+                                trading_code_mapping, 
+                                columns=df.columns.tolist(),
+                                event_date=event_date,
+                                settlement_date=settlement_date,
+                                actual_date=actual_date
+                            )
+                        except Exception as e:
+                            raise Exception(f"Error in _prepare_data_row at row {index} in file {os.path.basename(file_path)}: {e}")
+
+                        self.loader_data[trading_code].append(data_row)
+                        total_rows_processed += 1
+                    
+                    total_files_processed += 1
+            
+                # Normal mode: combine all data first, then export
+                # Dynamic dictionary to store data by trading code (shared across all files)
+                self.loader_data = defaultdict(list)
+                
+                for file_index, file_path in enumerate(self.selected_files):
+                    self.status_var.set(f"Processing file {file_index + 1}/{len(self.selected_files)}: {os.path.basename(file_path)}")
+                    
+                    # Read file with correct parameters:
+                    # header_row: 1-based row number where headers are (use read_row)
+                    # header_start_col: 0-based column index where headers start (use read_col)
+                    df = self.read_dynamic_file(
+                        file_path=file_path,
+                        header_row=read_row,  # Row number (1-based) where header is located
+                        header_start_col=read_col,  # Column index (0-based) where headers start
+                        sheet_name=0
+                    )
+                    
+                    # Process each row in the current file
+                    for index, row in df.iterrows():
+                        try:
+                            trading_code = str(row.get(TradingCode, "")).strip()
+                        except Exception as e:
+                            raise Exception(f"Error getting TradingCode at row {index} in file {os.path.basename(file_path)}: {e}")
+                        
+                        try:
+                            # Use single asio_sf4_ft config for all trading codes
+                            # LocationAccount will be set dynamically based on trading code
+                            # Pass dates and DataFrame columns
+                            data_row = self._prepare_data_row(
+                                row, 
+                                asio_sf4_ft_config, 
+                                trading_code, 
+                                trading_code_mapping, 
+                                columns=df.columns.tolist(),
+                                event_date=event_date,
+                                settlement_date=settlement_date,
+                                actual_date=actual_date
+                            )
+                        except Exception as e:
+                            raise Exception(f"Error in _prepare_data_row at row {index} in file {os.path.basename(file_path)}: {e}")
+
+                        self.loader_data[trading_code].append(data_row)
+                        total_rows_processed += 1
+                    
+                    total_files_processed += 1
             
             self.status_var.set(f"Processed {total_files_processed} file(s) successfully - {total_rows_processed} total rows processed")
             
             # Automatically export to template after processing all files
             self._export_to_template()
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to read file: {str(e)}")
+            # Cleanup temporary directories on error
+            for temp_dir in temp_dirs:
+                try:
+                    shutil.rmtree(temp_dir)
+                except Exception:
+                    pass  # Ignore cleanup errors
+            
+            messagebox.showerror("Error", f"Failed to process files: {str(e)}")
             self.status_var.set(f"Error: {str(e)}")
             return
+    
+    def _create_output_files_for_zip(self, zip_loader_data, event_date_str, zip_filename):
+        """Create output files (Excel/CSV) for a single zip file's data.
+        
+        Args:
+            zip_loader_data: Dictionary of trading_code -> list of data rows
+            event_date_str: Date string for filename (DDMMYYYY format)
+            zip_filename: Original zip filename (for naming output files)
+        
+        Returns:
+            list: List of tuples (file_io, filename) for all output files created
+        """
+        output_files = []
+        
+        # Get zip base name without extension for naming
+        zip_basename = os.path.splitext(zip_filename)[0]
+        
+        # Create files for each trading code
+        for trading_code, data_list in sorted(zip_loader_data.items()):
+            if not data_list:
+                continue
+            
+            # Convert list of lists to list of dicts
+            template_data_dicts = []
+            for row in data_list:
+                row_dict = {}
+                for idx, header in enumerate(sub_fund_4_headers):
+                    if idx < len(row):
+                        row_dict[header] = row[idx]
+                    else:
+                        row_dict[header] = ''
+                template_data_dicts.append(row_dict)
+            
+            if not template_data_dicts:
+                continue
+            
+            # Create Excel file if Excel format is selected
+            if self.export_excel_var.get():
+                excel_filename = f"ASIO_SF4_{trading_code}_{event_date_str}.xlsx"
+                excel_file, excel_name = output_save_in_template(
+                    template_data_dicts,
+                    sub_fund_4_headers,
+                    excel_filename
+                )
+                output_files.append((excel_file, excel_name))
+            
+            # Create CSV file if CSV format is selected
+            if self.export_csv_var.get():
+                csv_filename = f"ASIO_SF4_{trading_code}_{event_date_str}.csv"
+                # Create CSV in memory
+                csv_buffer = io.StringIO()
+                csv_writer = csv.DictWriter(csv_buffer, fieldnames=sub_fund_4_headers)
+                csv_writer.writeheader()
+                csv_writer.writerows(template_data_dicts)
+                csv_content = csv_buffer.getvalue()
+                csv_buffer.close()
+                
+                # Convert to bytes
+                csv_bytes = io.BytesIO(csv_content.encode('utf-8'))
+                output_files.append((csv_bytes, csv_filename))
+        
+        return output_files
+    
+    def _export_zip_to_separate_zip(self, zip_loader_data, event_date_str, zip_filename, zip_index, total_zips):
+        """Export output files from a single zip into its own separate ZIP file.
+        
+        Args:
+            zip_loader_data: Dictionary of trading_code -> list of data rows
+            event_date_str: Date string for filename (DDMMYYYY format)
+            zip_filename: Original zip filename
+            zip_index: Current zip index (1-based)
+            total_zips: Total number of zips being processed
+        """
+        if not zip_loader_data:
+            return
+        
+        # Create output files for this zip
+        output_files = self._create_output_files_for_zip(
+            zip_loader_data, 
+            event_date_str,
+            zip_filename
+        )
+        
+        if not output_files:
+            return
+        
+        # Ask output path for this zip's output file (only ask for first zip, then use same directory)
+        if zip_index == 1:
+            # For first zip, ask where to save
+            zip_output_filename = f"ASIO_Sub_Fund_4_FT_Trades_{event_date_str}.zip"
+            out_path = filedialog.asksaveasfilename(
+                title=f"Save Output ZIP for {zip_filename} (ZIP {zip_index}/{total_zips})",
+                defaultextension=".zip",
+                filetypes=[["ZIP Files", "*.zip"]],
+                initialfile=zip_output_filename
+            )
+            if not out_path:
+                # User cancelled - skip remaining zips
+                return
+            
+            # Store directory for remaining zips
+            self.bulk_export_dir = os.path.dirname(out_path)
+        else:
+            # For subsequent zips, use same directory with date-based filename
+            zip_output_filename = f"ASIO_Sub_Fund_4_FT_Trades_{event_date_str}.zip"
+            out_path = os.path.join(self.bulk_export_dir, zip_output_filename)
+        
+        # Update status
+        self.status_var.set(f"Creating output ZIP {zip_index}/{total_zips}: {zip_output_filename}")
+        
+        try:
+            # Create zip file with output files from this zip
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                # Add all output files
+                for file_io, filename in output_files:
+                    file_io.seek(0)
+                    zip_file.writestr(filename, file_io.read())
+            
+            # Save zip file
+            zip_buffer.seek(0)
+            with open(out_path, 'wb') as f:
+                f.write(zip_buffer.read())
+            
+            # Close all file buffers
+            for file_io, _ in output_files:
+                file_io.close()
+            zip_buffer.close()
+            
+            # Create file list for message
+            file_list = [name for _, name in output_files]
+            
+            # Show success message for last zip only
+            if zip_index == total_zips:
+                messagebox.showinfo(
+                    "Success", 
+                    f"All {total_zips} ZIP file(s) processed successfully!\n\n"
+                    f"Last file saved to:\n{out_path}\n\n"
+                    f"Contains {len(file_list)} file(s).\n\n"
+                    f"All output ZIPs saved in:\n{self.bulk_export_dir}"
+                )
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to export ZIP {zip_index}: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
     
     def _export_to_template(self):
         """Export data to template format (ZIP with Excel files separated by trading code)."""
@@ -1172,9 +1652,13 @@ class ASIOSubFund4Page(tk.Frame):
         
         # Get event date for filename
         try:
-            event_date = self.event_date_entry.get_date()
-            # Format date as DDMMYYYY for filename
-            event_date_str = event_date.strftime("%d%m%Y")
+            if self.event_date_entry:
+                event_date = self.event_date_entry.get_date()
+                # Format date as DDMMYYYY for filename
+                event_date_str = event_date.strftime("%d%m%Y")
+            else:
+                from datetime import datetime
+                event_date_str = datetime.now().strftime("%d%m%Y")
         except Exception:
             # If event date is not available, use current date or default
             from datetime import datetime
