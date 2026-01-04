@@ -549,7 +549,7 @@ def ensure_consolidated_data_file():
         
         # Add filter configurations to default data
         default_data["mcx_group2_filters"] = ['Commodity Future Option', 'Commodity Option', 'Commodity Future']
-        default_data["fno_group2_filters"] = ['Equity Option', 'Index Option', 'Index Future', 'Equity future']
+        default_data["fno_group2_filters"] = ['Equity Option', 'Index Option', 'Index Future', 'Equity Future']
         
         # Save the default consolidated data file
         try:
@@ -569,7 +569,7 @@ def ensure_consolidated_data_file():
                 default_data.update(asio_sf4_configs)
                 # Add filter configurations
                 default_data["mcx_group2_filters"] = ['Commodity Future Option', 'Commodity Option', 'Commodity Future']
-                default_data["fno_group2_filters"] = ['Equity Option', 'Index Option', 'Index Future', 'Equity future']
+                default_data["fno_group2_filters"] = ['Equity Option', 'Index Option', 'Index Future', 'Equity Future']
                 with open(consolidated_path, "w", encoding="utf-8") as f:
                     json.dump(default_data, f, indent=4, ensure_ascii=False)
             else:
@@ -584,7 +584,7 @@ def ensure_consolidated_data_file():
                     consolidated_data.update(asio_sf4_configs)
                     # Add filter configurations
                     consolidated_data["mcx_group2_filters"] = ['Commodity Future Option', 'Commodity Option', 'Commodity Future']
-                    consolidated_data["fno_group2_filters"] = ['Equity Option', 'Index Option', 'Index Future', 'Equity future']
+                    consolidated_data["fno_group2_filters"] = ['Equity Option', 'Index Option', 'Index Future', 'Equity Future']
                     with open(consolidated_path, "w", encoding="utf-8") as f:
                         json.dump(consolidated_data, f, indent=4, ensure_ascii=False)
                 else:
@@ -597,7 +597,7 @@ def ensure_consolidated_data_file():
                     
                     # Initialize filter configurations if they don't exist
                     default_mcx_filters = ['Commodity Future Option', 'Commodity Option', 'Commodity Future']
-                    default_fno_filters = ['Equity Option', 'Index Option', 'Index Future', 'Equity future']
+                    default_fno_filters = ['Equity Option', 'Index Option', 'Index Future', 'Equity Future']
                     
                     if "mcx_group2_filters" not in consolidated_data:
                         consolidated_data["mcx_group2_filters"] = default_mcx_filters
@@ -624,7 +624,7 @@ def ensure_consolidated_data_file():
                 default_data.update(asio_sf4_configs)
                 # Add filter configurations
                 default_data["mcx_group2_filters"] = ['Commodity Future Option', 'Commodity Option', 'Commodity Future']
-                default_data["fno_group2_filters"] = ['Equity Option', 'Index Option', 'Index Future', 'Equity future']
+                default_data["fno_group2_filters"] = ['Equity Option', 'Index Option', 'Index Future', 'Equity Future']
                 with open(consolidated_path, "w", encoding="utf-8") as f:
                     json.dump(default_data, f, indent=4, ensure_ascii=False)
                 print(f"Warning: consolidated_data.json was corrupted. Recreated file. Backup saved as {backup_path}")
