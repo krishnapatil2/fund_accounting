@@ -54,17 +54,33 @@ class ASIOTradeLoaderMCXPage(tk.Frame):
 
         self.file_path_var = tk.StringVar()
 
-        tk.Label(controls, text="Trade File:", font=("Arial", 11), bg="#ecf0f1", fg="#2c3e50").pack(side="left")
-        tk.Entry(controls, textvariable=self.file_path_var, width=60).pack(side="left", padx=8)
-        tk.Button(controls, text="Browse", command=self._browse_file, bg="#3498db", fg="white", relief="flat", padx=10, pady=4).pack(side="left")
+        # Trade File row
+        trade_file_row = tk.Frame(controls, bg="#ecf0f1")
+        trade_file_row.pack(fill="x", pady=2)
+        tk.Label(trade_file_row, text="Trade File:", font=("Arial", 11), bg="#ecf0f1", fg="#2c3e50").pack(side="left")
+        tk.Entry(trade_file_row, textvariable=self.file_path_var, width=60).pack(side="left", padx=8)
+        tk.Button(trade_file_row, text="Browse", command=self._browse_file, bg="#3498db", fg="white", relief="flat", padx=10, pady=4).pack(side="left")
 
-        tk.Button(controls, text="Process", command=self._process, bg="#27ae60", fg="white", relief="flat", padx=14, pady=6, font=("Arial", 11, "bold")).pack(side="left", padx=10)
-        tk.Button(controls, text="Export Excel", command=self._export_excel, bg="#8e44ad", fg="white", relief="flat", padx=14, pady=6, font=("Arial", 11, "bold")).pack(side="left")
-        tk.Button(controls, text="Export to Template", command=self._export_to_template, bg="#d35400", fg="white", relief="flat", padx=14, pady=6, font=("Arial", 11, "bold")).pack(side="left", padx=10)
+        # Format selection row
+        format_row = tk.Frame(controls, bg="#ecf0f1")
+        format_row.pack(fill="x", pady=2)
+        tk.Label(format_row, text="Export Format:", font=("Arial", 10), bg="#ecf0f1", fg="#2c3e50").pack(side="left")
+        self.csv_format_var = tk.BooleanVar(value=True)  # Default to CSV
+        self.xlsx_format_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(format_row, text="CSV", variable=self.csv_format_var, font=("Arial", 10), bg="#ecf0f1", fg="#2c3e50", selectcolor="#ecf0f1").pack(side="left", padx=(8, 4))
+        tk.Checkbutton(format_row, text="XLSX", variable=self.xlsx_format_var, font=("Arial", 10), bg="#ecf0f1", fg="#2c3e50", selectcolor="#ecf0f1").pack(side="left", padx=4)
+
+        # Buttons row
+        buttons_row = tk.Frame(controls, bg="#ecf0f1")
+        buttons_row.pack(fill="x", pady=5)
+        tk.Button(buttons_row, text="Process", command=self._process, bg="#27ae60", fg="white", relief="flat", padx=14, pady=6, font=("Arial", 11, "bold")).pack(side="left", padx=10)
+        tk.Button(buttons_row, text="Export Excel", command=self._export_excel, bg="#8e44ad", fg="white", relief="flat", padx=14, pady=6, font=("Arial", 11, "bold")).pack(side="left")
+        tk.Button(buttons_row, text="Export to Template", command=self._export_to_template, bg="#d35400", fg="white", relief="flat", padx=14, pady=6, font=("Arial", 11, "bold")).pack(side="left", padx=10)
 
         # Status
         self.status_var = tk.StringVar(value="Load a file (CSV/XLS/XLSX) and click Process")
-        tk.Label(self, textvariable=self.status_var, font=("Arial", 10), bg="#ecf0f1", fg="#7f8c8d").pack(fill="x", padx=20)
+        self.status_label = tk.Label(self, textvariable=self.status_var, font=("Arial", 10), bg="#f8f9fa", fg="#6c757d", anchor="w", relief="flat", bd=0, padx=15, pady=10)
+        self.status_label.pack(fill="x", padx=20, pady=(0, 10))
 
         # Single table view
         content = tk.Frame(self, bg="#ecf0f1")
@@ -564,10 +580,10 @@ class ASIOTradeLoaderMCXPage(tk.Frame):
             self.status_var.set(f"Processed {len(self.all_table_rows)} trade records (all) | Showing {unique_count} unique trade records")
         else:
             self.status_var.set(f"Showing {len(self.all_table_rows)} trade records (all data)")
+        self.status_label.config(fg="#6c757d")  # Reset to default gray color
 
     def _export_excel(self):
-        """Export data to Excel file."""
-        # Lazy import heavy libraries only when exporting
+        """Export data to Excel and/or CSV file based on format selection."""
         import pandas as pd
         from openpyxl.styles import Font, Border
         
@@ -575,56 +591,75 @@ class ASIOTradeLoaderMCXPage(tk.Frame):
             messagebox.showinfo("Nothing to export", "Process a file first.")
             return
 
-        # Ask output path
-        out_path = filedialog.asksaveasfilename(
-            title="Save Excel",
-            defaultextension=".xlsx",
-            filetypes=[["Excel", "*.xlsx"]],
-            initialfile="ASIOTradeLoader_MCX_Output.xlsx"
-        )
-        if not out_path:
+        export_csv = self.csv_format_var.get()
+        export_xlsx = self.xlsx_format_var.get()
+        
+        if not export_csv and not export_xlsx:
+            messagebox.showwarning("No Format Selected", "Please select at least one export format (CSV or XLSX).")
             return
 
-        # Build DataFrames and write sheets
+        data_type = "Unique" if self.unique_checkbox_var.get() else "All"
+        table_data = self.unique_table_rows if self.unique_checkbox_var.get() else self.all_table_rows
+        df_table = pd.DataFrame(table_data, columns=self.table_columns) if table_data else pd.DataFrame()
+        df_data = getattr(self, "_df_data", None)
+        exported_files = []
+
         try:
-            # Get table data based on checkbox state (what's currently displayed)
-            if self.unique_checkbox_var.get():
-                table_data = self.unique_table_rows
-            else:
-                table_data = self.all_table_rows
-            
-            df_table = pd.DataFrame(table_data, columns=self.table_columns) if table_data else pd.DataFrame()
+            # Export CSV first (default format)
+            if export_csv:
+                out_path = filedialog.asksaveasfilename(
+                    title="Save CSV", defaultextension=".csv",
+                    filetypes=[["CSV Files", "*.csv"]],
+                    initialfile=f"ASIOTradeLoader_MCX_Output_{data_type}.csv"
+                )
+                if out_path:
+                    df_table_csv = df_table.copy()
+                    for col in df_table_csv.columns:
+                        if df_table_csv[col].dtype == 'object' and len(df_table_csv) > 0:
+                            non_null_vals = df_table_csv[col].dropna()
+                            if not non_null_vals.empty and isinstance(non_null_vals.iloc[0], Decimal):
+                                df_table_csv[col] = df_table_csv[col].apply(lambda x: str(x) if pd.notna(x) else '')
+                    df_table_csv.to_csv(out_path, index=False, encoding='utf-8-sig')
+                    exported_files.append(f"CSV: {out_path}")
 
-            with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
-                # Sheet 1: Original Data (no bold headers, no borders)
-                df_data = getattr(self, "_df_data", None)
-                if df_data is not None:
-                    df_data.to_excel(writer, sheet_name="Original_Data", index=False)
-                else:
-                    pd.DataFrame().to_excel(writer, sheet_name="Original_Data", index=False)
-                # Normalize header styling
-                ws_orig = writer.book["Original_Data"]
-                if ws_orig.max_row >= 1:
-                    for cell in ws_orig[1]:
-                        cell.font = Font(bold=False)
-                        cell.border = Border()
+            # Export XLSX
+            if export_xlsx:
+                out_path = filedialog.asksaveasfilename(
+                    title="Save Excel", defaultextension=".xlsx",
+                    filetypes=[["Excel", "*.xlsx"]],
+                    initialfile=f"ASIOTradeLoader_MCX_Output_{data_type}.xlsx"
+                )
+                if out_path:
+                    with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
+                        (df_data if df_data is not None else pd.DataFrame()).to_excel(writer, sheet_name="Original_Data", index=False)
+                        ws_orig = writer.book["Original_Data"]
+                        if ws_orig.max_row >= 1:
+                            for cell in ws_orig[1]:
+                                cell.font = Font(bold=False)
+                                cell.border = Border()
+                        df_table.to_excel(writer, sheet_name=f"{data_type}_Trade_Data", index=False)
+                    exported_files.append(f"XLSX: {out_path}")
 
-                # Sheet 2: Trade Data (currently displayed - unique or all)
-                sheet_name = "Unique_Trade_Data" if self.unique_checkbox_var.get() else "All_Trade_Data"
-                df_table.to_excel(writer, sheet_name=sheet_name, index=False)
-
-            messagebox.showinfo("Success", f"Excel exported to:\n{out_path}")
+            if exported_files:
+                messagebox.showinfo("Success", f"Files exported successfully:\n\n" + "\n".join(exported_files))
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to export excel: {e}")
+            messagebox.showerror("Error", f"Failed to export: {e}")
 
     def _export_to_template(self):
-        """Export data to template format (ZIP with Excel files grouped by TM code)."""
-        # Lazy import heavy libraries only when exporting
+        """Export data to template format (ZIP with Excel/CSV files grouped by TM code)."""
         from CONSTANTS import TM_NAME_HEADERS, ASIO_SUB_FUND_2_MCX_OPTION_SECURITY_HEADER, ASIO_SUB_FUND_2_MCX_FUTURE_SECURITY_HEADER
-        from .helper import output_save_in_template, multiple_excels_to_zip
+        from .helper import output_save_in_template, output_save_in_template_csv, multiple_files_to_zip
         
         if not hasattr(self, 'data_by_tm_code') or not self.data_by_tm_code:
             messagebox.showinfo("Nothing to export", "Process a file first to generate template data.")
+            return
+
+        # Check format selection
+        export_csv = self.csv_format_var.get()
+        export_xlsx = self.xlsx_format_var.get()
+        
+        if not export_csv and not export_xlsx:
+            messagebox.showwarning("No Format Selected", "Please select at least one export format (CSV or XLSX).")
             return
 
         # Ask output path for zip file
@@ -639,63 +674,90 @@ class ASIOTradeLoaderMCXPage(tk.Frame):
         
         import time
         start_time = time.time()
-        # Show spinner (non-blocking)
         loader = LoadingSpinner(self, text="Exporting templates...")
 
         def task():
             try:
-                # Create Excel files using helper functions
-                excel_files = []
+                files = []
                 
-                # Create one Excel file for each TM code
-                for tm_code, data_list in self.data_by_tm_code.items():
-                    if data_list:  # Only create if there's data
-                        excel_file, excel_name = output_save_in_template(
-                            data_list,  # List of dicts matching TM_NAME_HEADERS
-                            TM_NAME_HEADERS,  # Headers from constant
-                            f"TM_{tm_code}_MCX_template.xlsx"
+                # Helper function to create files
+                def create_files(format_type, ext, func):
+                    file_list = []
+                    # Create files for each TM code
+                    for tm_code, data_list in self.data_by_tm_code.items():
+                        if data_list:
+                            file_io, file_name = func(
+                                data_list, TM_NAME_HEADERS,
+                                f"TM_{tm_code}_MCX_template{ext}"
+                            )
+                            file_list.append((file_io, file_name))
+                    
+                    # Create option security file
+                    if hasattr(self, 'asio_sub_fund_2_option') and self.asio_sub_fund_2_option:
+                        file_io, file_name = func(
+                            self.asio_sub_fund_2_option, ASIO_SUB_FUND_2_MCX_OPTION_SECURITY_HEADER,
+                            f"ASIO_Sub_Fund_2_MCX_Option_Security{ext}"
                         )
-                        excel_files.append((excel_file, excel_name))
+                        file_list.append((file_io, file_name))
+                    
+                    # Create future security file
+                    if hasattr(self, 'asio_sub_fund_2_future') and self.asio_sub_fund_2_future:
+                        file_io, file_name = func(
+                            self.asio_sub_fund_2_future, ASIO_SUB_FUND_2_MCX_FUTURE_SECURITY_HEADER,
+                            f"ASIO_Sub_Fund_2_MCX_Future_Security{ext}"
+                        )
+                        file_list.append((file_io, file_name))
+                    return file_list
                 
-                # Create Excel file for option security data
-                if hasattr(self, 'asio_sub_fund_2_option') and self.asio_sub_fund_2_option:
-                    option_excel_file, option_excel_name = output_save_in_template(
-                        self.asio_sub_fund_2_option,  # List of dicts matching
-                        ASIO_SUB_FUND_2_MCX_OPTION_SECURITY_HEADER,  # Headers from constant
-                        "ASIO_Sub_Fund_2_MCX_Option_Security.xlsx"
-                    )
-                    excel_files.append((option_excel_file, option_excel_name))
+                # Export CSV if selected
+                if export_csv:
+                    files.extend(create_files("CSV", ".csv", output_save_in_template_csv))
                 
-                if hasattr(self, 'asio_sub_fund_2_future') and self.asio_sub_fund_2_future:
-                    future_excel_file, future_excel_name = output_save_in_template(
-                        self.asio_sub_fund_2_future,  # List of dicts matching 
-                        ASIO_SUB_FUND_2_MCX_FUTURE_SECURITY_HEADER,  # Headers from constant
-                        "ASIO_Sub_Fund_2_MCX_Future_Security.xlsx"
-                    )
-                    excel_files.append((future_excel_file, future_excel_name))
+                # Export XLSX if selected
+                if export_xlsx:
+                    files.extend(create_files("XLSX", ".xlsx", output_save_in_template))
                 
-                if not excel_files:
+                if not files:
                     loader.close()
                     messagebox.showwarning("Warning", "No data to export.")
                     return
                 
                 # Create zip file
-                zip_buffer = multiple_excels_to_zip(excel_files, "MCX_ASIO_SF2_TradeLoader.zip")
+                zip_buffer = multiple_files_to_zip(files, "MCX_ASIO_SF2_TradeLoader.zip")
                 
                 # Save zip file
                 with open(out_path, 'wb') as f:
                     f.write(zip_buffer.read())
                 
-                file_list = [name for _, name in excel_files]
-                # Close loader + show success
+                file_list = [name for _, name in files]
                 loader.close()
-                messagebox.showinfo("Success", f"Template data exported to:\n{out_path}\n\nContains {len(file_list)} file(s):\n" + "\n".join([f"- {file}" for file in file_list]))
+                
+                email_zip_path = out_path
+                email_file_list = file_list.copy()
+                
+                def show_success_and_dialog():
+                    zip_filename = os.path.basename(email_zip_path)
+                    success_msg = f"✓ Success! Template exported: {zip_filename} ({len(email_file_list)} files)"
+                    self.status_var.set(success_msg)
+                    self.status_label.config(fg="#28a745")  # Green color
+                    self.after(100, lambda: self._show_email_dialog(email_zip_path, email_file_list))
+                
+                self.after(0, show_success_and_dialog)
             except Exception as e:
                 loader.close()
                 messagebox.showerror("Error", f"Failed to export template data: {e}")
             finally:
                 end_time = time.time()
         
-        # Run heavy work in thread
         threading.Thread(target=task, daemon=True).start()
+    
+    def _show_email_dialog(self, zip_path, file_list):
+        """Show email dialog for sending files via Outlook."""
+        try:
+            from .email_dialog import EmailDialog
+            EmailDialog(self, zip_path, file_list)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open email dialog: {e}")
+            import traceback
+            traceback.print_exc()
 

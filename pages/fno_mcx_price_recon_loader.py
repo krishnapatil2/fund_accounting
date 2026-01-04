@@ -10,7 +10,7 @@ import threading
 from tkcalendar import DateEntry
 
 from my_app.pages.loading import LoadingSpinner
-from .helper import output_save_in_template, multiple_excels_to_zip, read_file
+from .helper import output_save_in_template, output_save_in_template_csv, multiple_files_to_zip, read_file
 
 
 def _safe_decimal(value, precision=15):
@@ -82,9 +82,12 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
         price_data_row.pack(fill="x", pady=2)
         tk.Label(price_data_row, text="Price Date:", font=("Arial", 11), bg="#ecf0f1", fg="#2c3e50").pack(side="left")
         self.price_data_var = tk.StringVar()
-        # Set default to today's date - 1 day (yesterday)
+        # Set default: if Monday, show previous Friday; otherwise show yesterday
         today = datetime.now().date()
-        default_price_date = today - timedelta(days=1)
+        if today.weekday() == 0:  # Monday (0 = Monday)
+            default_price_date = today - timedelta(days=3)  # Previous Friday
+        else:
+            default_price_date = today - timedelta(days=1)  # Yesterday
         self.price_data_entry = DateEntry(
             price_data_row,
             textvariable=self.price_data_var,
@@ -95,13 +98,16 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
         self.price_data_entry.set_date(default_price_date)
         self.price_data_entry.pack(side="left", padx=8)
         
-        # Exclude Expiry Date (independent field, defaults to yesterday)
+        # Exclude Expiry Date (independent field, defaults to same logic as price date)
         date_entry_row = tk.Frame(controls, bg="#ecf0f1")
         date_entry_row.pack(fill="x", pady=2)
         tk.Label(date_entry_row, text="Exclude Expiry Date:", font=("Arial", 11), bg="#ecf0f1", fg="#2c3e50").pack(side="left")
         self.date_var = tk.StringVar()
-        # Set default to yesterday (independent from price date)
-        exclude_date = default_price_date
+        # Set default: if Monday, show previous Friday; otherwise show yesterday
+        if today.weekday() == 0:  # Monday (0 = Monday)
+            exclude_date = today - timedelta(days=3)  # Previous Friday
+        else:
+            exclude_date = today - timedelta(days=1)  # Yesterday
         self.date_entry = DateEntry(
             date_entry_row,
             textvariable=self.date_var,
@@ -112,6 +118,15 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
         self.date_entry.set_date(exclude_date)
         self.date_entry.pack(side="left", padx=8)
 
+        # Format selection row
+        format_row = tk.Frame(controls, bg="#ecf0f1")
+        format_row.pack(fill="x", pady=2)
+        tk.Label(format_row, text="Export Format:", font=("Arial", 10), bg="#ecf0f1", fg="#2c3e50").pack(side="left")
+        self.csv_format_var = tk.BooleanVar(value=True)  # Default to CSV
+        self.xlsx_format_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(format_row, text="CSV", variable=self.csv_format_var, font=("Arial", 10), bg="#ecf0f1", fg="#2c3e50", selectcolor="#ecf0f1").pack(side="left", padx=(8, 4))
+        tk.Checkbutton(format_row, text="XLSX", variable=self.xlsx_format_var, font=("Arial", 10), bg="#ecf0f1", fg="#2c3e50", selectcolor="#ecf0f1").pack(side="left", padx=4)
+
         # Buttons row
         buttons_row = tk.Frame(controls, bg="#ecf0f1")
         buttons_row.pack(fill="x", pady=5)
@@ -121,7 +136,8 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
 
         # Status
         self.status_var = tk.StringVar(value="Load LPA file and Holding Statement file, then click Process")
-        tk.Label(self, textvariable=self.status_var, font=("Arial", 10), bg="#ecf0f1", fg="#7f8c8d").pack(fill="x", padx=20)
+        self.status_label = tk.Label(self, textvariable=self.status_var, font=("Arial", 10), bg="#f8f9fa", fg="#6c757d", anchor="w", relief="flat", bd=0, padx=15, pady=10)
+        self.status_label.pack(fill="x", padx=20, pady=(0, 10))
 
         # Table view
         content = tk.Frame(self, bg="#ecf0f1")
@@ -352,6 +368,7 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
             # Render table
             self._render_table()
             self.status_var.set(f"Processed {len(self.table_rows)} records successfully")
+            self.status_label.config(fg="#6c757d")  # Reset to default gray color
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to process files: {e}")
@@ -596,7 +613,7 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
                                 else:
                                     row.append('')
                             elif header == INVESTMENT:
-                                print("invest_code", invest_code)
+                                # print("invest_code", invest_code)
                                 row.append(invest_code)
                             elif header == PRICE:
                                 # Use ContractSettlementPrice from holding_price_dict
@@ -655,49 +672,82 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
                 self.tree.insert("", "end", values=r)
 
     def _export_excel(self):
-        """Export data to Excel file."""
+        """Export data to Excel and/or CSV file based on format selection."""
         if not self.table_rows and not self.processed_data:
             messagebox.showinfo("Nothing to export", "Process files first.")
             return
 
-        # Ask output path
-        out_path = filedialog.asksaveasfilename(
-            title="Save Excel",
-            defaultextension=".xlsx",
-            filetypes=[["Excel", "*.xlsx"]],
-            initialfile="FNO_MCX_Price_Recon_Output.xlsx"
-        )
-        if not out_path:
+        export_csv = self.csv_format_var.get()
+        export_xlsx = self.xlsx_format_var.get()
+        
+        if not export_csv and not export_xlsx:
+            messagebox.showwarning("No Format Selected", "Please select at least one export format (CSV or XLSX).")
             return
 
-        # Build DataFrame and write to Excel
+        exported_files = []
+
         try:
             if self.table_rows:
                 df_table = pd.DataFrame(self.table_rows, columns=self.table_columns)
             else:
                 df_table = pd.DataFrame()
 
-            with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
-                # Sheet 1: Processed Data
-                if not df_table.empty:
-                    df_table.to_excel(writer, sheet_name="Price_Reconciliation", index=False)
-                
-                # Sheet 2: Original LPA Data
-                if self.lpa_data is not None and not self.lpa_data.empty:
-                    self.lpa_data.to_excel(writer, sheet_name="LPA_Original", index=False)
-                
-                # Sheet 3: Original Holding Data (without expiry date)
-                if self.holding_data is not None and not self.holding_data.empty:
-                    self.holding_data.to_excel(writer, sheet_name="Holding_Original", index=False)
+            # Export CSV first (default format)
+            if export_csv:
+                out_path = filedialog.asksaveasfilename(
+                    title="Save CSV", defaultextension=".csv",
+                    filetypes=[["CSV Files", "*.csv"]],
+                    initialfile="FNO_MCX_Price_Recon_Output.csv"
+                )
+                if out_path:
+                    df_table_csv = df_table.copy()
+                    for col in df_table_csv.columns:
+                        if df_table_csv[col].dtype == 'object' and len(df_table_csv) > 0:
+                            non_null_vals = df_table_csv[col].dropna()
+                            if not non_null_vals.empty and isinstance(non_null_vals.iloc[0], Decimal):
+                                df_table_csv[col] = df_table_csv[col].apply(lambda x: str(x) if pd.notna(x) else '')
+                    df_table_csv.to_csv(out_path, index=False, encoding='utf-8-sig')
+                    exported_files.append(f"CSV: {out_path}")
 
-            messagebox.showinfo("Success", f"Excel exported to:\n{out_path}")
+            # Export XLSX
+            if export_xlsx:
+                out_path = filedialog.asksaveasfilename(
+                    title="Save Excel", defaultextension=".xlsx",
+                    filetypes=[["Excel", "*.xlsx"]],
+                    initialfile="FNO_MCX_Price_Recon_Output.xlsx"
+                )
+                if out_path:
+                    with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
+                        # Sheet 1: Processed Data
+                        if not df_table.empty:
+                            df_table.to_excel(writer, sheet_name="Price_Reconciliation", index=False)
+                        
+                        # Sheet 2: Original LPA Data
+                        if self.lpa_data is not None and not self.lpa_data.empty:
+                            self.lpa_data.to_excel(writer, sheet_name="LPA_Original", index=False)
+                        
+                        # Sheet 3: Original Holding Data (without expiry date)
+                        if self.holding_data is not None and not self.holding_data.empty:
+                            self.holding_data.to_excel(writer, sheet_name="Holding_Original", index=False)
+                    exported_files.append(f"XLSX: {out_path}")
+
+            if exported_files:
+                messagebox.showinfo("Success", f"Files exported successfully:\n\n" + "\n".join(exported_files))
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to export excel: {e}")
+            messagebox.showerror("Error", f"Failed to export: {e}")
 
     def _export_to_template(self):
-        """Export data to template format."""
+        """Export data to template format (ZIP with Excel/CSV files)."""
         if not self._template_data:
             messagebox.showinfo("Nothing to export", "Process files first to generate template data.")
+            return
+
+        # Check format selection
+        export_csv = self.csv_format_var.get()
+        export_xlsx = self.xlsx_format_var.get()
+        
+        if not export_csv and not export_xlsx:
+            messagebox.showwarning("No Format Selected", "Please select at least one export format (CSV or XLSX).")
             return
 
         # Determine zip filename based on segment
@@ -723,7 +773,7 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
 
         def task():
             try:
-                excel_files = []
+                files = []
                 
                 # Get the appropriate header based on segment
                 if not self.selected_segment:
@@ -734,11 +784,11 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
                 # Select header based on segment
                 if self.selected_segment == 'FNO':
                     pricing_headers = FNO_PRICING_HEADER
-                    template_filename = "FNO_Pricing_Template.xlsx"
+                    template_filename_base = "FNO_Pricing_Template"
                     zip_filename = "FNO_Price_Recon_Template.zip"
                 elif self.selected_segment == 'MCX':
                     pricing_headers = MCX_PRICING_HEADER
-                    template_filename = "MCX_Pricing_Template.xlsx"
+                    template_filename_base = "MCX_Pricing_Template"
                     zip_filename = "MCX_Price_Recon_Template.zip"
                 else:
                     loader.close()
@@ -756,33 +806,63 @@ class FNOMCXPriceReconLoaderPage(tk.Frame):
                             row_dict[header] = ''
                     template_data_dicts.append(row_dict)
                 
-                # Create Excel file using helper function
-                if template_data_dicts:
-                    excel_file, excel_name = output_save_in_template(
+                # Export CSV if selected
+                if export_csv and template_data_dicts:
+                    file_io, file_name = output_save_in_template_csv(
                         template_data_dicts,
                         pricing_headers,
-                        template_filename
+                        f"{template_filename_base}.csv"
                     )
-                    excel_files.append((excel_file, excel_name))
+                    files.append((file_io, file_name))
                 
-                if not excel_files:
+                # Export XLSX if selected
+                if export_xlsx and template_data_dicts:
+                    file_io, file_name = output_save_in_template(
+                        template_data_dicts,
+                        pricing_headers,
+                        f"{template_filename_base}.xlsx"
+                    )
+                    files.append((file_io, file_name))
+                
+                if not files:
                     loader.close()
                     messagebox.showwarning("Warning", "No template data to export.")
                     return
                 
                 # Create zip file with segment-specific name
-                zip_buffer = multiple_excels_to_zip(excel_files, zip_filename)
+                zip_buffer = multiple_files_to_zip(files, zip_filename)
                 
                 # Save zip file
                 with open(out_path, 'wb') as f:
                     f.write(zip_buffer.read())
                 
-                file_list = [name for _, name in excel_files]
+                file_list = [name for _, name in files]
                 loader.close()
-                messagebox.showinfo("Success", f"Template data exported to:\n{out_path}\n\nContains {len(file_list)} file(s):\n" + "\n".join([f"- {file}" for file in file_list]))
+                
+                email_zip_path = out_path
+                email_file_list = file_list.copy()
+                
+                def show_success_and_dialog():
+                    zip_filename = os.path.basename(email_zip_path)
+                    success_msg = f"✓ Success! Template exported: {zip_filename} ({len(email_file_list)} files)"
+                    self.status_var.set(success_msg)
+                    self.status_label.config(fg="#28a745")  # Green color
+                    self.after(100, lambda: self._show_email_dialog(email_zip_path, email_file_list))
+                
+                self.after(0, show_success_and_dialog)
             except Exception as e:
                 loader.close()
                 messagebox.showerror("Error", f"Failed to export template data: {e}")
         
         # Run heavy work in thread
         threading.Thread(target=task, daemon=True).start()
+    
+    def _show_email_dialog(self, zip_path, file_list):
+        """Show email dialog for sending files via Outlook."""
+        try:
+            from .email_dialog import EmailDialog
+            EmailDialog(self, zip_path, file_list)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open email dialog: {e}")
+            import traceback
+            traceback.print_exc()

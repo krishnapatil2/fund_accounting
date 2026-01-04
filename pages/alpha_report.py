@@ -14,7 +14,7 @@ import threading
 
 
 from my_app.pages.loading import LoadingSpinner
-from .helper import output_save_in_template, multiple_excels_to_zip
+from .helper import output_save_in_template, output_save_in_template_csv, multiple_files_to_zip
 
 
 def _safe_decimal(value):
@@ -49,17 +49,33 @@ class AlphaReportPage(tk.Frame):
 
         self.csv_path_var = tk.StringVar()
 
-        tk.Label(controls, text="Trade File:", font=("Arial", 11), bg="#ecf0f1", fg="#2c3e50").pack(side="left")
-        tk.Entry(controls, textvariable=self.csv_path_var, width=60).pack(side="left", padx=8)
-        tk.Button(controls, text="Browse", command=self._browse_csv, bg="#3498db", fg="white", relief="flat", padx=10, pady=4).pack(side="left")
+        # Trade File row
+        trade_file_row = tk.Frame(controls, bg="#ecf0f1")
+        trade_file_row.pack(fill="x", pady=2)
+        tk.Label(trade_file_row, text="Trade File:", font=("Arial", 11), bg="#ecf0f1", fg="#2c3e50").pack(side="left")
+        tk.Entry(trade_file_row, textvariable=self.csv_path_var, width=60).pack(side="left", padx=8)
+        tk.Button(trade_file_row, text="Browse", command=self._browse_csv, bg="#3498db", fg="white", relief="flat", padx=10, pady=4).pack(side="left")
 
-        tk.Button(controls, text="Process", command=self._process, bg="#27ae60", fg="white", relief="flat", padx=14, pady=6, font=("Arial", 11, "bold")).pack(side="left", padx=10)
-        tk.Button(controls, text="Export Excel", command=self._export_excel, bg="#8e44ad", fg="white", relief="flat", padx=14, pady=6, font=("Arial", 11, "bold")).pack(side="left")
-        tk.Button(controls, text="Export to Template", command=self._export_to_template, bg="#d35400", fg="white", relief="flat", padx=14, pady=6, font=("Arial", 11, "bold")).pack(side="left", padx=10)
+        # Format selection row (below Trade File)
+        format_row = tk.Frame(controls, bg="#ecf0f1")
+        format_row.pack(fill="x", pady=2)
+        tk.Label(format_row, text="Export Format:", font=("Arial", 10), bg="#ecf0f1", fg="#2c3e50").pack(side="left")
+        self.csv_format_var = tk.BooleanVar(value=True)  # Default to CSV
+        self.xlsx_format_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(format_row, text="CSV", variable=self.csv_format_var, font=("Arial", 10), bg="#ecf0f1", fg="#2c3e50", selectcolor="#ecf0f1").pack(side="left", padx=(8, 4))
+        tk.Checkbutton(format_row, text="XLSX", variable=self.xlsx_format_var, font=("Arial", 10), bg="#ecf0f1", fg="#2c3e50", selectcolor="#ecf0f1").pack(side="left", padx=4)
+
+        # Buttons row
+        buttons_row = tk.Frame(controls, bg="#ecf0f1")
+        buttons_row.pack(fill="x", pady=5)
+        tk.Button(buttons_row, text="Process", command=self._process, bg="#27ae60", fg="white", relief="flat", padx=14, pady=6, font=("Arial", 11, "bold")).pack(side="left", padx=10)
+        tk.Button(buttons_row, text="Export Excel", command=self._export_excel, bg="#8e44ad", fg="white", relief="flat", padx=14, pady=6, font=("Arial", 11, "bold")).pack(side="left")
+        tk.Button(buttons_row, text="Export to Template", command=self._export_to_template, bg="#d35400", fg="white", relief="flat", padx=14, pady=6, font=("Arial", 11, "bold")).pack(side="left", padx=10)
 
         # Status
         self.status_var = tk.StringVar(value="Load a CSV/Excel file and click Process")
-        tk.Label(self, textvariable=self.status_var, font=("Arial", 10), bg="#ecf0f1", fg="#7f8c8d").pack(fill="x", padx=20)
+        self.status_label = tk.Label(self, textvariable=self.status_var, font=("Arial", 10), bg="#f8f9fa", fg="#6c757d", anchor="w", relief="flat", bd=0, padx=15, pady=10)
+        self.status_label.pack(fill="x", padx=20, pady=(0, 10))
 
         # Split views
         content = tk.Frame(self, bg="#ecf0f1")
@@ -431,6 +447,7 @@ class AlphaReportPage(tk.Frame):
         self._render_sec()
 
         self.status_var.set(f"Processed {len(self.for_trade_rows)} trades | {len(self.security_creation_rows)} securities")
+        self.status_label.config(fg="#6c757d")  # Reset to default gray color
 
     # ---- Rendering with filtering ----
     def _render_for_trade(self):
@@ -455,77 +472,130 @@ class AlphaReportPage(tk.Frame):
             messagebox.showinfo("Nothing to export", "Process a file first.")
             return
 
-        # Ask output path
-        out_path = filedialog.asksaveasfilename(
-            title="Save Excel",
-            defaultextension=".xlsx",
-            filetypes=[["Excel", "*.xlsx"]],
-            initialfile="TradeVentura_Output.xlsx"
-        )
-        if not out_path:
+        # Check format selection
+        export_csv = self.csv_format_var.get()
+        export_xlsx = self.xlsx_format_var.get()
+        
+        if not export_csv and not export_xlsx:
+            messagebox.showwarning("No Format Selected", "Please select at least one export format (CSV or XLSX).")
             return
 
-        # Build DataFrames and write sheets like test.py output
+        # Build DataFrames
+        df_for_trade = pd.DataFrame(self.for_trade_rows, columns=["Scrip", "Buy/Sell", "Qty", "Rate"]) 
+        df_sec = pd.DataFrame(self.security_creation_rows, columns=["Scrip Name", "Underlying", "Expiry", "Strike Price", "Call Put Flag", "Trading Size"]) 
+        df_csv = getattr(self, "_df_csv", None)
+
+        exported_files = []
+
         try:
-            df_for_trade = pd.DataFrame(self.for_trade_rows, columns=["Scrip", "Buy/Sell", "Qty", "Rate"]) 
-            df_sec = pd.DataFrame(self.security_creation_rows, columns=["Scrip Name", "Underlying", "Expiry", "Strike Price", "Call Put Flag", "Trading Size"]) 
+            # Export CSV if selected
+            if export_csv:
+                out_path = filedialog.asksaveasfilename(
+                    title="Save CSV",
+                    defaultextension=".csv",
+                    filetypes=[["CSV Files", "*.csv"]],
+                    initialfile="TradeVentura_Output.csv"
+                )
+                if out_path:
+                    # Convert Decimal objects to strings for CSV compatibility
+                    df_for_trade_csv = df_for_trade.copy()
+                    df_sec_csv = df_sec.copy()
+                    
+                    for col in df_for_trade_csv.columns:
+                        if df_for_trade_csv[col].dtype == 'object' and len(df_for_trade_csv) > 0:
+                            non_null_vals = df_for_trade_csv[col].dropna()
+                            if not non_null_vals.empty and isinstance(non_null_vals.iloc[0], Decimal):
+                                df_for_trade_csv[col] = df_for_trade_csv[col].apply(lambda x: str(x) if pd.notna(x) else '')
+                    
+                    for col in df_sec_csv.columns:
+                        if df_sec_csv[col].dtype == 'object' and len(df_sec_csv) > 0:
+                            non_null_vals = df_sec_csv[col].dropna()
+                            if not non_null_vals.empty and isinstance(non_null_vals.iloc[0], Decimal):
+                                df_sec_csv[col] = df_sec_csv[col].apply(lambda x: str(x) if pd.notna(x) else '')
+                    
+                    # Create combined CSV with both tables
+                    with open(out_path, 'w', encoding='utf-8-sig', newline='') as f:
+                        # Write For_Trade section
+                        f.write("For_Trade\n")
+                        df_for_trade_csv.to_csv(f, index=False)
+                        f.write("\n\nSecurity_Creation\n")
+                        df_sec_csv.to_csv(f, index=False)
+                    exported_files.append(f"CSV: {out_path}")
 
-            with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
-                # Sheet 1: Original Data (no bold headers, no borders)
-                df_csv = getattr(self, "_df_csv", None)
-                if df_csv is not None:
-                    df_csv.to_excel(writer, sheet_name="Original_Data", index=False)
-                else:
-                    pd.DataFrame().to_excel(writer, sheet_name="Original_Data", index=False)
-                # normalize header styling
-                ws_orig = writer.book["Original_Data"]
-                if ws_orig.max_row >= 1:
-                    for cell in ws_orig[1]:
-                        cell.font = Font(bold=False)
-                        cell.border = Border()
+            # Export XLSX if selected
+            if export_xlsx:
+                out_path = filedialog.asksaveasfilename(
+                    title="Save Excel",
+                    defaultextension=".xlsx",
+                    filetypes=[["Excel", "*.xlsx"]],
+                    initialfile="TradeVentura_Output.xlsx"
+                )
+                if out_path:
+                    with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
+                        # Sheet 1: Original Data (no bold headers, no borders)
+                        if df_csv is not None:
+                            df_csv.to_excel(writer, sheet_name="Original_Data", index=False)
+                        else:
+                            pd.DataFrame().to_excel(writer, sheet_name="Original_Data", index=False)
+                        # normalize header styling
+                        ws_orig = writer.book["Original_Data"]
+                        if ws_orig.max_row >= 1:
+                            for cell in ws_orig[1]:
+                                cell.font = Font(bold=False)
+                                cell.border = Border()
 
-                # Sheet 2: combined with merged section headers
-                workbook = writer.book
-                ws = workbook.create_sheet(title="Trade_and_Security")
+                        # Sheet 2: combined with merged section headers
+                        workbook = writer.book
+                        ws = workbook.create_sheet(title="Trade_and_Security")
 
-                for_trade_header = ["Scrip", "Buy/Sell", "Qty", "Rate"]
-                sec_creation_header = ["Scrip Name", "Underlying", "Expiry", "Strike Price", "Call Put Flag", "Trading Size"]
+                        for_trade_header = ["Scrip", "Buy/Sell", "Qty", "Rate"]
+                        sec_creation_header = ["Scrip Name", "Underlying", "Expiry", "Strike Price", "Call Put Flag", "Trading Size"]
 
-                # Merge headers
-                ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(for_trade_header))
-                ws.merge_cells(start_row=1, start_column=len(for_trade_header)+2, 
-                               end_row=1, end_column=len(for_trade_header)+1+len(sec_creation_header))
+                        # Merge headers
+                        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(for_trade_header))
+                        ws.merge_cells(start_row=1, start_column=len(for_trade_header)+2, 
+                                       end_row=1, end_column=len(for_trade_header)+1+len(sec_creation_header))
 
-                ws.cell(row=1, column=1, value="For_Trade").alignment = Alignment(horizontal="center")
-                ws.cell(row=1, column=1).font = Font(bold=True)
+                        ws.cell(row=1, column=1, value="For_Trade").alignment = Alignment(horizontal="center")
+                        ws.cell(row=1, column=1).font = Font(bold=True)
 
-                ws.cell(row=1, column=len(for_trade_header)+2, value="Security_Creation").alignment = Alignment(horizontal="center")
-                ws.cell(row=1, column=len(for_trade_header)+2).font = Font(bold=True)
+                        ws.cell(row=1, column=len(for_trade_header)+2, value="Security_Creation").alignment = Alignment(horizontal="center")
+                        ws.cell(row=1, column=len(for_trade_header)+2).font = Font(bold=True)
 
-                # Sub headers
-                for col, header in enumerate(for_trade_header, start=1):
-                    ws.cell(row=2, column=col, value=header).font = Font(bold=True)
-                for col, header in enumerate(sec_creation_header, start=len(for_trade_header)+2):
-                    ws.cell(row=2, column=col, value=header).font = Font(bold=True)
+                        # Sub headers
+                        for col, header in enumerate(for_trade_header, start=1):
+                            ws.cell(row=2, column=col, value=header).font = Font(bold=True)
+                        for col, header in enumerate(sec_creation_header, start=len(for_trade_header)+2):
+                            ws.cell(row=2, column=col, value=header).font = Font(bold=True)
 
-                # Data rows
-                max_len = max(len(self.for_trade_rows), len(self.security_creation_rows))
-                sec_values = self.security_creation_rows
-                for i in range(max_len):
-                    if i < len(self.for_trade_rows):
-                        for col, val in enumerate(self.for_trade_rows[i], start=1):
-                            ws.cell(row=i+3, column=col, value=val)
-                    if i < len(sec_values):
-                        for col, val in enumerate(sec_values[i], start=len(for_trade_header)+2):
-                            ws.cell(row=i+3, column=col, value=val)
+                        # Data rows
+                        max_len = max(len(self.for_trade_rows), len(self.security_creation_rows))
+                        sec_values = self.security_creation_rows
+                        for i in range(max_len):
+                            if i < len(self.for_trade_rows):
+                                for col, val in enumerate(self.for_trade_rows[i], start=1):
+                                    ws.cell(row=i+3, column=col, value=val)
+                            if i < len(sec_values):
+                                for col, val in enumerate(sec_values[i], start=len(for_trade_header)+2):
+                                    ws.cell(row=i+3, column=col, value=val)
+                    exported_files.append(f"XLSX: {out_path}")
 
-            messagebox.showinfo("Success", f"Excel exported to:\n{out_path}")
+            if exported_files:
+                messagebox.showinfo("Success", f"Files exported successfully:\n\n" + "\n".join(exported_files))
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to export excel: {e}")
+            messagebox.showerror("Error", f"Failed to export: {e}")
 
     def _export_to_template(self):
         if not hasattr(self, '_aafspl_car_future_data') or not hasattr(self, '_car_trade_loader_data') or not hasattr(self, '_option_security_data'):
             messagebox.showinfo("Nothing to export", "Process a file first to generate template data.")
+            return
+
+        # Check format selection
+        export_csv = self.csv_format_var.get()
+        export_xlsx = self.xlsx_format_var.get()
+        
+        if not export_csv and not export_xlsx:
+            messagebox.showwarning("No Format Selected", "Please select at least one export format (CSV or XLSX).")
             return
 
         # Ask output path for zip file
@@ -544,58 +614,75 @@ class AlphaReportPage(tk.Frame):
         loader = LoadingSpinner(self, text="Exporting templates...")
 
         def task():
-
             try:
-                # Create Excel files using helper functions
-                excel_files = []
+                files = []
                 
-                # Create aafspl_car_future Excel
-                if self._aafspl_car_future_data:
-                    # print(f"Creating aafspl Excel with {len(self._aafspl_car_future_data)} rows...")
-                    excel_start = time.time()
-                    aafspl_excel, aafspl_name = output_save_in_template(
-                        self._aafspl_car_future_data, 
-                        AAFSPL_HEADER, 
-                        "aafspl_car_future_data.xlsx"
-                    )
-                    # print(f"aafspl Excel created in {time.time() - excel_start:.4f} seconds")
-                    excel_files.append((aafspl_excel, aafspl_name))
+                # Helper function to create files in selected format
+                def create_files(format_type, ext, func):
+                    file_list = []
+                    # Create aafspl_future_loader file
+                    if self._aafspl_car_future_data:
+                        file_io, file_name = func(
+                            self._aafspl_car_future_data, 
+                            AAFSPL_HEADER, 
+                            f"aafspl_future_loader{ext}"
+                        )
+                        file_list.append((file_io, file_name))
+                    
+                    # Create aafspl_trade_loader file
+                    if self._car_trade_loader_data:
+                        file_io, file_name = func(
+                            self._car_trade_loader_data, 
+                            CAR_TRADE_HEADERS, 
+                            f"aafspl_trade_loader{ext}"
+                        )
+                        file_list.append((file_io, file_name))
+                    
+                    # Create aafspl_option_loader file
+                    if self._option_security_data:
+                        file_io, file_name = func(
+                            self._option_security_data, 
+                            OPTION_HEADER, 
+                            f"aafspl_option_loader{ext}"
+                        )
+                        file_list.append((file_io, file_name))
+                    
+                    return file_list
                 
-                # Create car_trade_loader Excel
-                if self._car_trade_loader_data:
-                    # print(f"Creating car_trade Excel with {len(self._car_trade_loader_data)} rows...")
-                    excel_start = time.time()
-                    car_trade_excel, car_trade_name = output_save_in_template(
-                        self._car_trade_loader_data, 
-                        CAR_TRADE_HEADERS, 
-                        "car_trade_loader_data.xlsx"
-                    )
-                    # print(f"car_trade Excel created in {time.time() - excel_start:.4f} seconds")
-                    excel_files.append((car_trade_excel, car_trade_name))
+                # Export CSV if selected
+                if export_csv:
+                    files.extend(create_files("CSV", ".csv", output_save_in_template_csv))
                 
-                # Create option_security Excel
-                if self._option_security_data:
-                    # print(f"Creating option Excel with {len(self._option_security_data)} rows...")
-                    excel_start = time.time()
-                    option_excel, option_name = output_save_in_template(
-                        self._option_security_data, 
-                        OPTION_HEADER, 
-                        "option_security_data.xlsx"
-                    )
-                    # print(f"option Excel created in {time.time() - excel_start:.4f} seconds")
-                    excel_files.append((option_excel, option_name))
+                # Export XLSX if selected
+                if export_xlsx:
+                    files.extend(create_files("XLSX", ".xlsx", output_save_in_template))
+                
+                if not files:
+                    loader.close()
+                    messagebox.showwarning("Warning", "No data to export.")
+                    return
                 
                 # Create zip file
-                zip_buffer = multiple_excels_to_zip(excel_files, "TradeVentura.zip")
+                zip_buffer = multiple_files_to_zip(files, "TradeVentura.zip")
                 
                 # Save zip file
                 with open(out_path, 'wb') as f:
                     f.write(zip_buffer.read())
                 
-                file_list = [name for _, name in excel_files]
-                # ✅ Close loader + show success
+                file_list = [name for _, name in files]
                 loader.close()
-                messagebox.showinfo("Success", f"Template data exported to:\n{out_path}\n\nContains:\n" + "\n".join([f"- {file}" for file in file_list]))
+                
+                email_zip_path = out_path
+                email_file_list = file_list.copy()
+                
+                def show_success_and_dialog():
+                    zip_filename = os.path.basename(email_zip_path)
+                    success_msg = f"✓ Success! Template exported: {zip_filename} ({len(email_file_list)} files)"
+                    self.status_var.set(success_msg)
+                    self.status_label.config(fg="#28a745")  # Green color
+                    self.after(100, lambda: self._show_email_dialog(email_zip_path, email_file_list))
+                
+                self.after(0, show_success_and_dialog)
             except Exception as e:
                 loader.close()
                 messagebox.showerror("Error", f"Failed to export template data: {e}")
@@ -605,6 +692,16 @@ class AlphaReportPage(tk.Frame):
         
         # 🔹 Run heavy work in thread
         threading.Thread(target=task, daemon=True).start()
+    
+    def _show_email_dialog(self, zip_path, file_list):
+        """Show email dialog for sending files via Outlook."""
+        try:
+            from .email_dialog import EmailDialog
+            EmailDialog(self, zip_path, file_list)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open email dialog: {e}")
+            import traceback
+            traceback.print_exc()
 
 
     def _template_data(self, df_csv, date_key, scrip_key, buy_qty_key,
@@ -789,11 +886,22 @@ class AlphaReportPage(tk.Frame):
         # Track unique scrip names for filtering
         seen_option_scrips = set()
         seen_aafspl_scrips = set()
+
         
+        def safe_strip(x):
+            if pd.isna(x):
+                return ""
+            s = str(x).strip()
+            return "" if s.lower() in {"", "na", "nan", "none", "null"} else s
+
         for idx, row in enumerate(rows_data):            # Clean string values
             for key, value in row.items():
                 if isinstance(value, str):
                     row[key] = value.strip()
+
+            client_code = safe_strip(row.get("Client\nCode"))
+            if client_code.strip() == "":
+                continue
 
             date = row.get(date_key)
             # Handle both string dates (from CSV) and Timestamp objects (from Excel)
@@ -802,17 +910,20 @@ class AlphaReportPage(tk.Frame):
             elif isinstance(date, (pd.Timestamp, datetime)):
                 # Already a datetime object from Excel
                 date_obj = date if isinstance(date, datetime) else date.to_pydatetime()
-                formatted_date = date_obj.strftime("%d/%m/%Y")
+                # formatted_date = date_obj.strftime("%d/%m/%Y")
+                formatted_date = date_obj.strftime("%Y/%m/%d")
             elif isinstance(date, str):
                 # String date from CSV - parse it
                 date_obj = datetime.strptime(date, "%d-%b-%y")
-                formatted_date = date_obj.strftime("%d/%m/%Y")
+                # formatted_date = date_obj.strftime("%d/%m/%Y")
+                formatted_date = date_obj.strftime("%Y/%m/%d")
             else:
                 # Try to convert to string first, then parse
                 try:
                     date_str = str(date)
                     date_obj = datetime.strptime(date_str, "%d-%b-%y")
-                    formatted_date = date_obj.strftime("%d/%m/%Y")
+                    # formatted_date = date_obj.strftime("%d/%m/%Y")
+                    formatted_date = date_obj.strftime("%Y/%m/%d")
                 except (ValueError, TypeError):
                     continue  # Skip rows with unparseable dates
 

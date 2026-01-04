@@ -43,7 +43,7 @@ class ASIOSubFund4Page(tk.Frame):
         )
         title.pack(pady=(0, 20))
 
-        # Create canvas for scrolling (no visible scrollbar)
+        # Create canvas for scrolling with visible scrollbar
         canvas_frame = tk.Frame(self, bg="#ffffff")
         canvas_frame.pack(fill="both", expand=True, padx=0, pady=0)
         
@@ -54,6 +54,16 @@ class ASIOSubFund4Page(tk.Frame):
             highlightthickness=0,
             borderwidth=0
         )
+        
+        # Scrollbar for canvas
+        self.scrollbar = tk.Scrollbar(canvas_frame, orient="vertical", command=self.canvas.yview)
+        
+        # Configure canvas scrolling
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        
+        # Pack canvas first, then scrollbar
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
         
         # Scrollable frame inside canvas
         self.scrollable_frame = tk.Frame(self.canvas, bg="#ffffff")
@@ -74,11 +84,11 @@ class ASIOSubFund4Page(tk.Frame):
         # Bind canvas resize to update scrollable frame width
         self.canvas.bind("<Configure>", self._on_canvas_configure)
         
-        # Pack canvas (no scrollbar - completely hidden)
-        self.canvas.pack(side="left", fill="both", expand=True)
-        
         # Bind mouse wheel for scrolling
         self._bind_mousewheel()
+        
+        # Bind keyboard events for scrolling with arrow keys (same as dashboard)
+        self._bind_keyboard_scrolling()
         
         # Main container inside scrollable frame
         main_container = tk.Frame(self.scrollable_frame, bg="#ffffff")
@@ -449,7 +459,7 @@ class ASIOSubFund4Page(tk.Frame):
         # Submit button with hover effect - centered and prominent
         submit_btn = tk.Button(
             submit_section,
-            text="✓ Submit",
+            text="Submit",
             command=self._submit,
             bg="#27ae60",
             fg="white",
@@ -475,7 +485,7 @@ class ASIOSubFund4Page(tk.Frame):
 
         # Status bar
         self.status_var = tk.StringVar(value="Ready - Please select files and configure settings")
-        status_label = tk.Label(
+        self.status_label = tk.Label(
             main_container,
             textvariable=self.status_var,
             font=("Arial", 10),
@@ -487,7 +497,7 @@ class ASIOSubFund4Page(tk.Frame):
             padx=15,
             pady=10
         )
-        status_label.pack(fill="x", pady=(0, 20))
+        self.status_label.pack(fill="x", pady=(0, 20))
     
     def _on_canvas_configure(self, event):
         """Update scrollable frame width when canvas is resized."""
@@ -525,6 +535,61 @@ class ASIOSubFund4Page(tk.Frame):
                 self.canvas.bind("<Leave>", _unbind_from_mousewheel)
         except Exception:
             pass
+    
+    def _bind_keyboard_scrolling(self):
+        """Bind keyboard events for scrolling with arrow keys (same as dashboard)"""
+        # Bind arrow keys to canvas and scrollable frame
+        self.canvas.bind("<Up>", lambda e: self._scroll_up())
+        self.canvas.bind("<Down>", lambda e: self._scroll_down())
+        self.canvas.bind("<Page_Up>", lambda e: self._scroll_page_up())
+        self.canvas.bind("<Page_Down>", lambda e: self._scroll_page_down())
+        self.canvas.bind("<Home>", lambda e: self._scroll_home())
+        self.canvas.bind("<End>", lambda e: self._scroll_end())
+        
+        # Also bind to scrollable frame
+        self.scrollable_frame.bind("<Up>", lambda e: self._scroll_up())
+        self.scrollable_frame.bind("<Down>", lambda e: self._scroll_down())
+        self.scrollable_frame.bind("<Page_Up>", lambda e: self._scroll_page_up())
+        self.scrollable_frame.bind("<Page_Down>", lambda e: self._scroll_page_down())
+        self.scrollable_frame.bind("<Home>", lambda e: self._scroll_home())
+        self.scrollable_frame.bind("<End>", lambda e: self._scroll_end())
+        
+        # Set focus to canvas so keyboard events work
+        self.canvas.focus_set()
+        
+        # Also bind when clicking on canvas or scrollable frame
+        self.canvas.bind("<Button-1>", lambda e: self.canvas.focus_set())
+        self.scrollable_frame.bind("<Button-1>", lambda e: self.canvas.focus_set())
+    
+    def _scroll_up(self):
+        """Scroll up one unit"""
+        self.canvas.yview_scroll(-1, "units")
+        return "break"
+    
+    def _scroll_down(self):
+        """Scroll down one unit"""
+        self.canvas.yview_scroll(1, "units")
+        return "break"
+    
+    def _scroll_page_up(self):
+        """Scroll up one page"""
+        self.canvas.yview_scroll(-1, "pages")
+        return "break"
+    
+    def _scroll_page_down(self):
+        """Scroll down one page"""
+        self.canvas.yview_scroll(1, "pages")
+        return "break"
+    
+    def _scroll_home(self):
+        """Scroll to top"""
+        self.canvas.yview_moveto(0)
+        return "break"
+    
+    def _scroll_end(self):
+        """Scroll to bottom"""
+        self.canvas.yview_moveto(1)
+        return "break"
 
     def _browse_files(self):
         """Browse and select xls, xlsx, csv files, or zip files if bulk mode is enabled."""
@@ -542,9 +607,9 @@ class ASIOSubFund4Page(tk.Frame):
             files = filedialog.askopenfilenames(
                 title="Select Files",
                 filetypes=[
-                    ("All Supported Files", "*.xls *.xlsx *.csv"),
-                    ("Excel Files", "*.xls *.xlsx"),
-                    ("CSV Files", "*.csv"),
+                    # ("All Supported Files", "*.xls *.xlsx *.csv"),
+                    # ("Excel Files", "*.xls *.xlsx"),
+                    # ("CSV Files", "*.csv"),
                     ("All Files", "*.*")
                 ]
             )
@@ -1202,10 +1267,12 @@ class ASIOSubFund4Page(tk.Frame):
         if not self.selected_files:
             messagebox.showwarning("Warning", "Please select at least one file to process.")
             self.status_var.set("Error: No files selected")
+            self.status_label.config(fg="#dc3545")  # Red color for errors
             return
 
         # Process the submission
         self.status_var.set("Processing... Please wait")
+        self.status_label.config(fg="#6c757d")  # Reset to default gray color
         
         # Load configurations from consolidated_data.json (once for all files)
         from my_app.file_utils import get_app_directory
@@ -1228,16 +1295,26 @@ class ASIOSubFund4Page(tk.Frame):
         except Exception as e:
             messagebox.showerror("Error", f"Failed to load consolidated_data.json: {e}")
             self.status_var.set(f"Error: Failed to load configurations")
+            self.status_label.config(fg="#dc3545")  # Red color for errors
             return
         
         # Process all files in the list
         total_rows_processed = 0
         total_files_processed = 0
         temp_dirs = []  # Track temp directories for cleanup
+        bulk_generated_zips = []  # Track all generated ZIP files for bulk mode
         
         try:
             # Check if bulk processing mode is enabled
             if self.bulk_var.get():
+                # Ask for output directory once at the start
+                self.bulk_export_dir = filedialog.askdirectory(
+                    title="Select Directory to Save All Output ZIP Files"
+                )
+                if not self.bulk_export_dir:
+                    self.status_var.set("Bulk processing cancelled by user")
+                    return
+                
                 # Bulk processing mode: process zip files separately
                 for zip_index, zip_path in enumerate(self.selected_files):
                     zip_filename = os.path.basename(zip_path)
@@ -1318,13 +1395,17 @@ class ASIOSubFund4Page(tk.Frame):
                         total_files_processed += 1
                     
                     # Create output files for this zip and save as separate ZIP file
-                    self._export_zip_to_separate_zip(
+                    generated_zip_path = self._export_zip_to_separate_zip(
                         zip_loader_data, 
                         event_date_str,
                         zip_filename,
                         zip_index + 1,
                         len(self.selected_files)
                     )
+                    
+                    # Track generated ZIP file
+                    if generated_zip_path:
+                        bulk_generated_zips.append(generated_zip_path)
                 
                 # Cleanup temporary directories
                 for temp_dir in temp_dirs:
@@ -1332,6 +1413,10 @@ class ASIOSubFund4Page(tk.Frame):
                         shutil.rmtree(temp_dir)
                     except Exception:
                         pass  # Ignore cleanup errors
+                
+                # Create master ZIP containing all generated ZIPs and show email dialog
+                if bulk_generated_zips:
+                    self._create_master_zip_and_email(bulk_generated_zips)
                 
                 self.status_var.set(f"Processed {len(self.selected_files)} ZIP file(s) - {total_rows_processed} total rows processed")
                 return
@@ -1344,6 +1429,7 @@ class ASIOSubFund4Page(tk.Frame):
                     if not (self.event_date_entry and self.settlement_date_entry and self.actual_date_entry):
                         messagebox.showerror("Error", "Date widgets are still initializing. Please wait a moment.")
                         self.status_var.set("Error: Date widgets not ready")
+                        self.status_label.config(fg="#dc3545")  # Red color for errors
                         return
                 try:
                     event_date = self.event_date_entry.get_date()
@@ -1352,6 +1438,7 @@ class ASIOSubFund4Page(tk.Frame):
                 except Exception as e:
                     messagebox.showerror("Error", f"Invalid date selection: {str(e)}")
                     self.status_var.set("Error: Invalid date")
+                    self.status_label.config(fg="#dc3545")  # Red color for errors
                     return
 
                 # Validate row and column inputs
@@ -1387,10 +1474,12 @@ class ASIOSubFund4Page(tk.Frame):
                     except ValueError:
                         messagebox.showerror("Error", "Read From Row must be a valid number")
                         self.status_var.set("Error: Invalid row value")
+                        self.status_label.config(fg="#dc3545")  # Red color for errors
                         return
                     except Exception as e:
                         messagebox.showerror("Error", f"Invalid column input: {str(e)}")
                         self.status_var.set("Error: Invalid column value")
+                        self.status_label.config(fg="#dc3545")  # Red color for errors
                         return
                 
                 # Process individual files
@@ -1496,6 +1585,7 @@ class ASIOSubFund4Page(tk.Frame):
             
             messagebox.showerror("Error", f"Failed to process files: {str(e)}")
             self.status_var.set(f"Error: {str(e)}")
+            self.status_label.config(fg="#dc3545")  # Red color for errors
             return
     
     def _create_output_files_for_zip(self, zip_loader_data, event_date_str, zip_filename):
@@ -1569,9 +1659,12 @@ class ASIOSubFund4Page(tk.Frame):
             zip_filename: Original zip filename
             zip_index: Current zip index (1-based)
             total_zips: Total number of zips being processed
+        
+        Returns:
+            str: Path to generated ZIP file, or None if cancelled/failed
         """
         if not zip_loader_data:
-            return
+            return None
         
         # Create output files for this zip
         output_files = self._create_output_files_for_zip(
@@ -1583,26 +1676,14 @@ class ASIOSubFund4Page(tk.Frame):
         if not output_files:
             return
         
-        # Ask output path for this zip's output file (only ask for first zip, then use same directory)
-        if zip_index == 1:
-            # For first zip, ask where to save
-            zip_output_filename = f"ASIO_Sub_Fund_4_FT_Trades_{event_date_str}.zip"
-            out_path = filedialog.asksaveasfilename(
-                title=f"Save Output ZIP for {zip_filename} (ZIP {zip_index}/{total_zips})",
-                defaultextension=".zip",
-                filetypes=[["ZIP Files", "*.zip"]],
-                initialfile=zip_output_filename
-            )
-            if not out_path:
-                # User cancelled - skip remaining zips
-                return
-            
-            # Store directory for remaining zips
-            self.bulk_export_dir = os.path.dirname(out_path)
-        else:
-            # For subsequent zips, use same directory with date-based filename
-            zip_output_filename = f"ASIO_Sub_Fund_4_FT_Trades_{event_date_str}.zip"
-            out_path = os.path.join(self.bulk_export_dir, zip_output_filename)
+        # Get output directory from parent (set during bulk processing)
+        bulk_export_dir = getattr(self, 'bulk_export_dir', None)
+        if not bulk_export_dir:
+            return None
+        
+        # Create filename for this zip (based on date from zip filename)
+        zip_output_filename = f"ASIO_Sub_Fund_4_FT_Trades_{event_date_str}.zip"
+        out_path = os.path.join(bulk_export_dir, zip_output_filename)
         
         # Update status
         self.status_var.set(f"Creating output ZIP {zip_index}/{total_zips}: {zip_output_filename}")
@@ -1626,23 +1707,13 @@ class ASIOSubFund4Page(tk.Frame):
                 file_io.close()
             zip_buffer.close()
             
-            # Create file list for message
-            file_list = [name for _, name in output_files]
-            
-            # Show success message for last zip only
-            if zip_index == total_zips:
-                messagebox.showinfo(
-                    "Success", 
-                    f"All {total_zips} ZIP file(s) processed successfully!\n\n"
-                    f"Last file saved to:\n{out_path}\n\n"
-                    f"Contains {len(file_list)} file(s).\n\n"
-                    f"All output ZIPs saved in:\n{self.bulk_export_dir}"
-                )
+            # Return the generated ZIP path
+            return out_path
         except Exception as e:
             messagebox.showerror("Error", f"Failed to export ZIP {zip_index}: {e}")
             import traceback
             traceback.print_exc()
-            raise
+            return None
     
     def _export_to_template(self):
         """Export data to template format (ZIP with Excel files separated by trading code)."""
@@ -1772,12 +1843,18 @@ class ASIOSubFund4Page(tk.Frame):
                     file_list.extend([name for _, name in csv_files])
                 
                 loader.close()
-                messagebox.showinfo(
-                    "Success", 
-                    f"Template data exported to:\n{out_path}\n\n"
-                    f"Contains {len(file_list)} file(s):\n" + 
-                    "\n".join([f"- {file}" for file in file_list])
-                )
+                
+                email_zip_path = out_path
+                email_file_list = file_list.copy()
+                
+                def show_success_and_dialog():
+                    zip_filename = os.path.basename(email_zip_path)
+                    success_msg = f"✓ Success! Template exported: {zip_filename} ({len(email_file_list)} files)"
+                    self.status_var.set(success_msg)
+                    self.status_label.config(fg="#28a745")  # Green color
+                    self.after(100, lambda: self._show_email_dialog(email_zip_path, email_file_list))
+                
+                self.after(0, show_success_and_dialog)
             except Exception as e:
                 loader.close()
                 messagebox.showerror("Error", f"Failed to export template data: {e}")
@@ -1786,3 +1863,76 @@ class ASIOSubFund4Page(tk.Frame):
         
         # Run heavy work in thread
         threading.Thread(target=task, daemon=True).start()
+    
+    def _create_master_zip_and_email(self, zip_paths):
+        """Extract all files from all generated ZIPs and create a combined ZIP with all individual files.
+        
+        Args:
+            zip_paths: List of paths to all generated ZIP files
+        """
+        if not zip_paths:
+            return
+        
+        try:
+            # Use the same directory that was selected at the start (no dialog)
+            bulk_export_dir = getattr(self, 'bulk_export_dir', None)
+            if not bulk_export_dir:
+                # Fallback: use directory of first ZIP
+                bulk_export_dir = os.path.dirname(zip_paths[0]) if zip_paths else os.getcwd()
+            
+            # Create combined ZIP in the same directory
+            combined_zip_filename = f"ASIO_Sub_Fund_4_FT_Trades_All_{datetime.now().strftime('%d%m%Y')}.zip"
+            combined_zip_path = os.path.join(bulk_export_dir, combined_zip_filename)
+            
+            # Extract all files from all ZIPs and create combined ZIP
+            all_files_list = []
+            with zipfile.ZipFile(combined_zip_path, 'w', zipfile.ZIP_DEFLATED) as combined_zip:
+                for zip_path in zip_paths:
+                    if os.path.exists(zip_path):
+                        # Extract all files from this ZIP
+                        with zipfile.ZipFile(zip_path, 'r') as source_zip:
+                            for file_info in source_zip.namelist():
+                                # Skip directories
+                                if file_info.endswith('/'):
+                                    continue
+                                
+                                # Read file content from source ZIP
+                                file_content = source_zip.read(file_info)
+                                
+                                # Add to combined ZIP (use just filename to avoid conflicts)
+                                # If duplicate filenames exist, keep all with unique names
+                                filename = os.path.basename(file_info)
+                                if filename in all_files_list:
+                                    # Add index to make unique
+                                    base, ext = os.path.splitext(filename)
+                                    counter = 1
+                                    while filename in all_files_list:
+                                        filename = f"{base}_{counter}{ext}"
+                                        counter += 1
+                                
+                                all_files_list.append(filename)
+                                combined_zip.writestr(filename, file_content)
+            
+            # Show success message in green on status bar and open email dialog
+            def show_success_and_dialog():
+                success_msg = f"✓ Success! All {len(zip_paths)} ZIP file(s) processed. Combined ZIP: {combined_zip_filename} ({len(all_files_list)} files)"
+                self.status_var.set(success_msg)
+                self.status_label.config(fg="#28a745")  # Green color
+                self.after(100, lambda: self._show_email_dialog(combined_zip_path, all_files_list))
+            
+            self.after(0, show_success_and_dialog)
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to create combined ZIP: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _show_email_dialog(self, zip_path, file_list):
+        """Show email dialog for sending files via Outlook."""
+        try:
+            from .email_dialog import EmailDialog
+            EmailDialog(self, zip_path, file_list)
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open email dialog: {e}")
+            import traceback
+            traceback.print_exc()
