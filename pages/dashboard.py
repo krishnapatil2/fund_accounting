@@ -11,9 +11,17 @@ class DashboardPage(tk.Frame):
         # Try to get main app reference for navigation
         self.main_app = self._get_main_app()
         
-        # Create scrollable canvas without scrollbar - direct mouse scrolling
-        self.canvas = tk.Canvas(self, bg="#ecf0f1", highlightthickness=0)
+        # Create scrollable canvas with scrollbar
+        # Create a frame to hold canvas and scrollbar
+        canvas_frame = tk.Frame(self, bg="#ecf0f1")
+        canvas_frame.pack(fill="both", expand=True)
+        
+        self.canvas = tk.Canvas(canvas_frame, bg="#ecf0f1", highlightthickness=0)
         self.scrollable_frame = tk.Frame(self.canvas, bg="#ecf0f1")
+        
+        # Create vertical scrollbar
+        self.scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
         
         # Throttle scroll region updates to prevent hanging
         self._scroll_update_pending = False
@@ -30,7 +38,7 @@ class DashboardPage(tk.Frame):
         # Create window in canvas for scrollable_frame
         self.canvas_window = self.canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
         
-        # Configure canvas scrolling without scrollbar (no yscrollcommand needed)
+        # Configure canvas scrolling with scrollbar
         
         # Make canvas window width match canvas width (throttled)
         self._width_update_pending = False
@@ -75,8 +83,12 @@ class DashboardPage(tk.Frame):
         dataset_frame.pack(fill="x", padx=20, pady=(0, 15))
         self.create_dataset_overview(dataset_frame, config_data)
         
-        # Pack canvas (no scrollbar)
-        self.canvas.pack(fill="both", expand=True)
+        # Pack canvas and scrollbar side by side
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.scrollbar.pack(side="right", fill="y")
+        
+        # Bind keyboard events for scrolling
+        self._bind_keyboard_scrolling()
         
         # Bind mousewheel events after all widgets are created
         self.after(300, self._bind_mousewheel_global)
@@ -216,7 +228,9 @@ class DashboardPage(tk.Frame):
             ("📋 ASIO Sub Fund 4", "Process Sub Fund 4 trade files"),
             ("📈 Daily F&O Reconciliation", "Daily F&O reconciliation process"),
             ("💰 FNO/MCX Price Recon", "Price reconciliation reports"),
+            ("📑 GTN Loader", "Process GTN trade files"),
             ("📑 Excel Merger", "Merge multiple Excel files"),
+            ("📥 Download NSE Bhavcopy", "Download NSE equity bhavcopy for a specific date"),
         ]
         
         # Create buttons in a grid
@@ -327,6 +341,62 @@ class DashboardPage(tk.Frame):
         except Exception:
             pass
     
+
+    def _bind_keyboard_scrolling(self):
+        """Bind keyboard events for scrolling with arrow keys"""
+        # Bind arrow keys to canvas and scrollable frame
+        self.canvas.bind("<Up>", lambda e: self._scroll_up())
+        self.canvas.bind("<Down>", lambda e: self._scroll_down())
+        self.canvas.bind("<Page_Up>", lambda e: self._scroll_page_up())
+        self.canvas.bind("<Page_Down>", lambda e: self._scroll_page_down())
+        self.canvas.bind("<Home>", lambda e: self._scroll_home())
+        self.canvas.bind("<End>", lambda e: self._scroll_end())
+        
+        # Also bind to scrollable frame
+        self.scrollable_frame.bind("<Up>", lambda e: self._scroll_up())
+        self.scrollable_frame.bind("<Down>", lambda e: self._scroll_down())
+        self.scrollable_frame.bind("<Page_Up>", lambda e: self._scroll_page_up())
+        self.scrollable_frame.bind("<Page_Down>", lambda e: self._scroll_page_down())
+        self.scrollable_frame.bind("<Home>", lambda e: self._scroll_home())
+        self.scrollable_frame.bind("<End>", lambda e: self._scroll_end())
+        
+        # Set focus to canvas so keyboard events work
+        self.canvas.focus_set()
+        
+        # Also bind when clicking on canvas or scrollable frame
+        self.canvas.bind("<Button-1>", lambda e: self.canvas.focus_set())
+        self.scrollable_frame.bind("<Button-1>", lambda e: self.canvas.focus_set())
+    
+    def _scroll_up(self):
+        """Scroll up one unit"""
+        self.canvas.yview_scroll(-1, "units")
+        return "break"
+    
+    def _scroll_down(self):
+        """Scroll down one unit"""
+        self.canvas.yview_scroll(1, "units")
+        return "break"
+    
+    def _scroll_page_up(self):
+        """Scroll up one page"""
+        self.canvas.yview_scroll(-1, "pages")
+        return "break"
+    
+    def _scroll_page_down(self):
+        """Scroll down one page"""
+        self.canvas.yview_scroll(1, "pages")
+        return "break"
+    
+    def _scroll_home(self):
+        """Scroll to top"""
+        self.canvas.yview_moveto(0)
+        return "break"
+    
+    def _scroll_end(self):
+        """Scroll to bottom"""
+        self.canvas.yview_moveto(1)
+        return "break"
+    
     def _get_main_app(self):
         """Try to get main app reference by traversing widget hierarchy"""
         widget = self
@@ -355,7 +425,9 @@ class DashboardPage(tk.Frame):
                 "📋 ASIO Sub Fund 4": ("asio_sub_fund4", "ASIOSubFund4Page"),
                 "📈 Daily F&O Reconciliation": ("fo_reconciliation", "FOReconciliationPage"),
                 "💰 FNO/MCX Price Recon": ("fno_mcx_price_recon_loader", "FNOMCXPriceReconLoaderPage"),
+                "📑 GTN Loader": ("gtn_loader", "GTNLoaderPage"),
                 "📑 Excel Merger": ("excel_merger", "ExcelMergerPage"),
+                "📥 Download NSE Bhavcopy": ("bhavcopy_downloader", "BhavcopyDownloaderPage"),
             }
             
             if report_name not in report_to_module:
@@ -381,7 +453,7 @@ class DashboardPage(tk.Frame):
         
         # Fallback: show informative message
         from tkinter import messagebox
-        clean_name = report_name.replace("📈 ", "").replace("🔄 ", "").replace("📊 ", "").replace("📋 ", "").replace("💰 ", "").replace("📑 ", "")
+        clean_name = report_name.replace("📈 ", "").replace("🔄 ", "").replace("📊 ", "").replace("📋 ", "").replace("💰 ", "").replace("📑 ", "").replace("📥 ", "")
         messagebox.showinfo("Quick Access", 
                           f"To access '{clean_name}', please use the 'Process' menu in the navigation bar.")
     
@@ -416,6 +488,9 @@ class DashboardPage(tk.Frame):
             "asio_pricing_mcx": ["FNO and MCX Price Recon & Loader"],
             "mcx_group2_filters": ["FNO and MCX Price Recon & Loader"],
             "fno_group2_filters": ["FNO and MCX Price Recon & Loader"],
+            "GTN_LOADER": ["GTN Loader"],
+            "gtn_sp_30_call_option": ["GTN Loader"],
+            "gtn_sp_30_put_option": ["GTN Loader"],
         }
     
     def create_dataset_overview(self, parent, config_data):
