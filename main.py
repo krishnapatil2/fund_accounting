@@ -82,7 +82,7 @@ def _get_page_class(page_name):
 MENU_STRUCTURE = {
     "Dashboard": "dashboard",
     "Data Config": "dataconfig",
-    "Settings": "settings",
+    # "Settings": "settings",
     "Process": {  # Dropdown Menu
         "Alpha Report": "alpha_report",
         "ASIO Reconciliation": "asio_reconciliation",
@@ -125,6 +125,12 @@ class MainApp(tk.Tk):
         
         # Force window to appear immediately
         self.update()
+        
+        # Center the main window, positioned slightly above center
+        self.update_idletasks()
+        x = (self.winfo_screenwidth() // 2) - (self.winfo_width() // 2)
+        y = (self.winfo_screenheight() // 2) - (self.winfo_height() // 2) - 30  # Move up 80 pixels from center
+        self.geometry(f"{self.winfo_width()}x{self.winfo_height()}+{x}+{y}")
         
         # Show environment popup on startup
         self.after(200, self._show_environment_popup)
