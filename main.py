@@ -1,4 +1,5 @@
 import tkinter as tk
+from tkinter import messagebox, ttk
 import sys
 import os
 import threading
@@ -9,6 +10,10 @@ from file_utils import ensure_consolidated_data_file
 THEME_COLOR = "#307356"
 HOVER_COLOR = "#23533E"
 BG_COLOR = "#F9F9F9"
+
+# Environment Configuration
+# Change this to: "UAT", "PROD", "DEV", "TEST", etc.
+APP_ENVIRONMENT = "UAT"
 
 # Lazy page loader - pages imported only when accessed
 _page_cache = {}
@@ -63,6 +68,14 @@ def _get_page_class(page_name):
         from pages import excel_merger
         _page_cache[page_name] = excel_merger.ExcelMergerPage
         return excel_merger.ExcelMergerPage
+    elif page_name == "bhavcopy_downloader":
+        from pages import bhavcopy_downloader
+        _page_cache[page_name] = bhavcopy_downloader.BhavcopyDownloaderPage
+        return bhavcopy_downloader.BhavcopyDownloaderPage
+    elif page_name == "gtn_loader":
+        from pages import gtn_loader
+        _page_cache[page_name] = gtn_loader.GTNLoaderPage
+        return gtn_loader.GTNLoaderPage
     return None
 
 # Menu structure with lazy loading
@@ -78,7 +91,9 @@ MENU_STRUCTURE = {
         "ASIO Sub Fund 4": "asio_sub_fund4",
         "Daily F&O Reconciliation": "fo_reconciliation",
         "FNO and MCX Price Recon & Loader": "fno_mcx_price_recon_loader",
+        "GTN Loader": "gtn_loader",
         "Excel Merger": "excel_merger",
+        "Download NSE Bhavcopy": "bhavcopy_downloader",
     }
 }
 
@@ -92,7 +107,7 @@ class MainApp(tk.Tk):
         
         # Show UI immediately for faster perceived startup
         self.title("Fund Accounting App")
-        self.geometry("1000x600")
+        self.geometry("1050x650")
         self.configure(bg=BG_COLOR)
 
         # Top Nav
@@ -111,11 +126,116 @@ class MainApp(tk.Tk):
         # Force window to appear immediately
         self.update()
         
+        # Show environment popup on startup
+        self.after(200, self._show_environment_popup)
+        
         # Load icon and data file in background (non-blocking)
         self.after(100, self._load_resources)
         
         # Show dashboard immediately (lazy loaded)
         self.after(50, lambda: self.show_page("dashboard"))
+    
+    def _show_environment_popup(self):
+        """Show status popup with all reports on startup"""
+        try:
+            # Get all report names from menu structure
+            report_names = []
+            if "Process" in MENU_STRUCTURE and isinstance(MENU_STRUCTURE["Process"], dict):
+                report_names = list(MENU_STRUCTURE["Process"].keys())
+            
+            # Create a custom popup window
+            popup = tk.Toplevel(self)
+            popup.title("Status")
+            popup.geometry("450x400")
+            popup.configure(bg=BG_COLOR)
+            popup.resizable(False, False)
+            
+            # Center the popup on screen
+            popup.update_idletasks()
+            x = (popup.winfo_screenwidth() // 2) - (popup.winfo_width() // 2)
+            y = (popup.winfo_screenheight() // 2) - (popup.winfo_height() // 2)
+            popup.geometry(f"+{x}+{y}")
+            
+            # Make popup modal (focus on it)
+            popup.transient(self)
+            popup.grab_set()
+            
+            # Header frame with theme color
+            header_frame = tk.Frame(popup, bg=THEME_COLOR, height=50)
+            header_frame.pack(fill="x")
+            header_frame.pack_propagate(False)
+            
+            # Status title label
+            status_label = tk.Label(
+                header_frame,
+                text="Status",
+                font=("Arial", 16, "bold"),
+                bg=THEME_COLOR,
+                fg="white"
+            )
+            status_label.pack(pady=12)
+            
+            # Content frame
+            content_frame = tk.Frame(popup, bg=BG_COLOR)
+            content_frame.pack(fill="both", expand=True, padx=15, pady=15)
+            
+            # Table frame
+            table_frame = tk.Frame(content_frame, bg=BG_COLOR, relief="solid", borderwidth=1)
+            table_frame.pack(fill="both", expand=True)
+            
+            # Create table with two columns: Report Name and UAT
+            table = ttk.Treeview(table_frame, columns=("ReportName", "Environment"), show="headings", height=10)
+            table.heading("ReportName", text="Report Name")
+            table.heading("Environment", text="Environment")
+            table.column("ReportName", width=300, anchor="w")
+            table.column("Environment", width=100, anchor="center")
+            
+            # Insert report names with UAT into table
+            for report_name in report_names:
+                table.insert("", "end", values=(report_name, APP_ENVIRONMENT))
+            
+            table.pack(fill="both", expand=True, padx=2, pady=2)
+            
+            # Button frame at bottom
+            button_frame = tk.Frame(content_frame, bg=BG_COLOR)
+            button_frame.pack(side="bottom", fill="x", pady=(15, 0))
+            
+            # OK button
+            ok_button = tk.Button(
+                button_frame,
+                text="OK",
+                font=("Arial", 11, "bold"),
+                bg=THEME_COLOR,
+                fg="white",
+                activebackground=HOVER_COLOR,
+                activeforeground="white",
+                relief="flat",
+                padx=30,
+                pady=8,
+                command=popup.destroy
+            )
+            ok_button.pack()
+            
+            # Focus on OK button
+            ok_button.focus_set()
+            
+            # Bind Enter key to close
+            popup.bind('<Return>', lambda e: popup.destroy())
+            popup.bind('<Escape>', lambda e: popup.destroy())
+            
+            # Auto-close popup after 10 seconds
+            popup.after(5000, popup.destroy)
+            
+        except Exception as e:
+            # Fallback to simple messagebox if custom popup fails
+            try:
+                messagebox.showinfo(
+                    "Status",
+                    f"Application Status\n\nEnvironment: {APP_ENVIRONMENT}",
+                    parent=self
+                )
+            except:
+                pass
     
     def _load_resources(self):
         """Load resources in background to not block UI"""
