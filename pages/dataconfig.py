@@ -283,7 +283,7 @@ class DataConfigPage(tk.Frame):
             # List of all expected datasets
             expected_datasets = ["fund_filename_map", "asio_recon_portfolio_mapping", "asio_recon_format_1_headers", "asio_recon_format_2_headers", 
                                 "asio_recon_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                                "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "asio_sf_2_mcx_future_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_pricing_fno", "asio_pricing_mcx", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config", "mcx_group2_filters", "fno_group2_filters"]
+                                "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "asio_sf_2_mcx_future_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_pricing_fno", "asio_pricing_mcx", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config", "mcx_group2_filters", "fno_group2_filters", "GTN_LOADER", "gtn_sp_30_call_option", "gtn_sp_30_put_option"]
             
             if os.path.exists(consolidated_path):
                 # Load file; if unreadable/empty, recreate with defaults
@@ -626,6 +626,98 @@ class DataConfigPage(tk.Frame):
                             "FT1": "Asio_Sub Fund_4_OHM_FO_DBSBK0000289_FT1",
                             "FT2": "Asio_Sub Fund_4_OHM_FO_DBSBK0000289_FT2",
                             "FT3": "Asio_Sub Fund_4_OHM_FO_DBSBK0000289_FT3"
+                        },
+                        "GTN_LOADER": {
+                            "RecordType": "",
+                            "RecordAction": "InsertUpdate",
+                            "KeyValue": "",
+                            "KeyValue.KeyName": "",
+                            "UserTranId1": "",
+                            "Portfolio": "AISF-SP30",
+                            "LocationAccount": "AISFSP30-GTN-ASI488267075",
+                            "Strategy": "Default",
+                            "Investment": "",
+                            "Broker": "",
+                            "EventDate": "",
+                            "SettleDate": "",
+                            "ActualSettleDate": "",
+                            "Quantity": "",
+                            "Price": "",
+                            "PriceDenomination": "CALC",
+                            "CounterInvestment": "USD",
+                            "NetInvestmentAmount": "CALC",
+                            "NetCounterAmount": "CALC",
+                            "tradeFX": "",
+                            "ContractFxRateNumerator": "",
+                            "ContractFxRateDenominator": "",
+                            "ContractFxRate": "",
+                            "NotionalAmount": "",
+                            "FundStructure": "CALC",
+                            "SpotDate": "",
+                            "PriceDirectly": "",
+                            "CounterFXDenomination": "USD",
+                            "CounterTDateFx": "",
+                            "AccruedInterest": "",
+                            "InvestmentAccruedInterest": "",
+                            "Comments": "",
+                            "TradeExpenses.ExpenseNumber": "",
+                            "TradeExpenses.ExpenseCode": "",
+                            "TradeExpenses.ExpenseAmt": "",
+                            "TradeExpenses.ExpenseNumber1": "",
+                            "TradeExpenses.ExpenseCode1": "",
+                            "TradeExpenses.ExpenseAmt1": "",
+                            "TradeExpenses.ExpenseNumber2": "",
+                            "TradeExpenses.ExpenseCode2": "",
+                            "TradeExpenses.ExpenseAmt2": "",
+                            "NonCapExpenses.NonCapNumber": "1",
+                            "NonCapExpenses.NonCapExpenseCode": "BrokerageFeeExpense",
+                            "NonCapExpenses.NonCapAmount": "",
+                            "NonCapExpenses.NonCapCurrency": "USD",
+                            "NonCapExpenses.LocationAccount": "AISFSP30-GTN-ASI488267075",
+                            "NonCapExpenses.NonCapLiabilityCode": "BrokerageFeesPayable",
+                            "NonCapExpenses.NonCapPaymentType": "SettleDate",
+                            "NonCapExpenses.NonCapNumber1": "",
+                            "NonCapExpenses.NonCapExpenseCode1": "",
+                            "NonCapExpenses.NonCapAmount1": "",
+                            "NonCapExpenses.NonCapCurrency1": "",
+                            "NonCapExpenses.LocationAccount1": "",
+                            "NonCapExpenses.NonCapLiabilityCode1": "",
+                            "NonCapExpenses.NonCapPaymentType1": "",
+                            "NonCapExpenses.NonCapNumber2": "",
+                            "NonCapExpenses.NonCapExpenseCode2": "",
+                            "NonCapExpenses.NonCapAmount2": "",
+                            "NonCapExpenses.NonCapCurrency2": "",
+                            "NonCapExpenses.LocationAccount2": "",
+                            "NonCapExpenses.NonCapLiabilityCode2": "",
+                            "NonCapExpenses.NonCapPaymentType2": ""
+                        },
+                        "gtn_sp_30_call_option": {
+                            "A": "January",
+                            "B": "February",
+                            "C": "March",
+                            "D": "April",
+                            "E": "May",
+                            "F": "June",
+                            "G": "July",
+                            "H": "August",
+                            "I": "September",
+                            "J": "October",
+                            "K": "November",
+                            "L": "December"
+                        },
+                        "gtn_sp_30_put_option": {
+                            "M": "January",
+                            "N": "February",
+                            "O": "March",
+                            "P": "April",
+                            "Q": "May",
+                            "R": "June",
+                            "S": "July",
+                            "T": "August",
+                            "U": "September",
+                            "V": "October",
+                            "W": "November",
+                            "X": "December"
                         }
                     }
                     with open(consolidated_path, "w") as fw:
@@ -1282,6 +1374,98 @@ class DataConfigPage(tk.Frame):
                     "mcx_tm_code_with_tm_name": {
                         "31640": "Achintya Securities Pvt. Ltd.",
                         "10515": "SMC Global Securities Limited"
+                    },
+                    "GTN_LOADER": {
+                        "RecordType": "",
+                        "RecordAction": "InsertUpdate",
+                        "KeyValue": "",
+                        "KeyValue.KeyName": "",
+                        "UserTranId1": "",
+                        "Portfolio": "AISF-SP30",
+                        "LocationAccount": "AISFSP30-GTN-ASI488267075",
+                        "Strategy": "Default",
+                        "Investment": "",
+                        "Broker": "",
+                        "EventDate": "",
+                        "SettleDate": "",
+                        "ActualSettleDate": "",
+                        "Quantity": "",
+                        "Price": "",
+                        "PriceDenomination": "CALC",
+                        "CounterInvestment": "USD",
+                        "NetInvestmentAmount": "CALC",
+                        "NetCounterAmount": "CALC",
+                        "tradeFX": "",
+                        "ContractFxRateNumerator": "",
+                        "ContractFxRateDenominator": "",
+                        "ContractFxRate": "",
+                        "NotionalAmount": "",
+                        "FundStructure": "CALC",
+                        "SpotDate": "",
+                        "PriceDirectly": "",
+                        "CounterFXDenomination": "USD",
+                        "CounterTDateFx": "",
+                        "AccruedInterest": "",
+                        "InvestmentAccruedInterest": "",
+                        "Comments": "",
+                        "TradeExpenses.ExpenseNumber": "",
+                        "TradeExpenses.ExpenseCode": "",
+                        "TradeExpenses.ExpenseAmt": "",
+                        "TradeExpenses.ExpenseNumber1": "",
+                        "TradeExpenses.ExpenseCode1": "",
+                        "TradeExpenses.ExpenseAmt1": "",
+                        "TradeExpenses.ExpenseNumber2": "",
+                        "TradeExpenses.ExpenseCode2": "",
+                        "TradeExpenses.ExpenseAmt2": "",
+                        "NonCapExpenses.NonCapNumber": "1",
+                        "NonCapExpenses.NonCapExpenseCode": "BrokerageFeeExpense",
+                        "NonCapExpenses.NonCapAmount": "",
+                        "NonCapExpenses.NonCapCurrency": "USD",
+                        "NonCapExpenses.LocationAccount": "AISFSP30-GTN-ASI488267075",
+                        "NonCapExpenses.NonCapLiabilityCode": "BrokerageFeesPayable",
+                        "NonCapExpenses.NonCapPaymentType": "SettleDate",
+                        "NonCapExpenses.NonCapNumber1": "",
+                        "NonCapExpenses.NonCapExpenseCode1": "",
+                        "NonCapExpenses.NonCapAmount1": "",
+                        "NonCapExpenses.NonCapCurrency1": "",
+                        "NonCapExpenses.LocationAccount1": "",
+                        "NonCapExpenses.NonCapLiabilityCode1": "",
+                        "NonCapExpenses.NonCapPaymentType1": "",
+                        "NonCapExpenses.NonCapNumber2": "",
+                        "NonCapExpenses.NonCapExpenseCode2": "",
+                        "NonCapExpenses.NonCapAmount2": "",
+                        "NonCapExpenses.NonCapCurrency2": "",
+                        "NonCapExpenses.LocationAccount2": "",
+                        "NonCapExpenses.NonCapLiabilityCode2": "",
+                        "NonCapExpenses.NonCapPaymentType2": ""
+                    },
+                    "gtn_sp_30_call_option": {
+                        "A": "January",
+                        "B": "February",
+                        "C": "March",
+                        "D": "April",
+                        "E": "May",
+                        "F": "June",
+                        "G": "July",
+                        "H": "August",
+                        "I": "September",
+                        "J": "October",
+                        "K": "November",
+                        "L": "December"
+                    },
+                    "gtn_sp_30_put_option": {
+                        "M": "January",
+                        "N": "February",
+                        "O": "March",
+                        "P": "April",
+                        "Q": "May",
+                        "R": "June",
+                        "S": "July",
+                        "T": "August",
+                        "U": "September",
+                        "V": "October",
+                        "W": "November",
+                        "X": "December"
                     }
                 }
                 
@@ -1298,7 +1482,7 @@ class DataConfigPage(tk.Frame):
                     self.underlying_code_data = self.default_underlying_code_data.copy()
                 for dataset_name in ["fund_filename_map", "asio_recon_portfolio_mapping", "asio_recon_format_1_headers", "asio_recon_format_2_headers", 
                                     "asio_recon_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config", "mcx_group2_filters", "fno_group2_filters"]:
+                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config", "mcx_group2_filters", "fno_group2_filters", "GTN_LOADER", "gtn_sp_30_call_option", "gtn_sp_30_put_option"]:
                     if dataset_name in default_consolidated_data:
                         data = default_consolidated_data[dataset_name]
                         # Normalize keys to strings for TM code mappings
@@ -2433,7 +2617,108 @@ class DataConfigPage(tk.Frame):
         
         # Default FNO Group2 Filters
         if dataset_name == "fno_group2_filters":
-            return ['Equity Option', 'Index Option', 'Index Future', 'Equity future']
+            return ['Equity Option', 'Index Option', 'Index Future', 'Equity Future']
+        
+        # Default GTN Loader
+        if dataset_name == "GTN_LOADER":
+            return {
+                "RecordType": "",
+                "RecordAction": "InsertUpdate",
+                "KeyValue": "",
+                "KeyValue.KeyName": "",
+                "UserTranId1": "",
+                "Portfolio": "AISF-SP30",
+                "LocationAccount": "AISFSP30-GTN-ASI488267075",
+                "Strategy": "Default",
+                "Investment": "",
+                "Broker": "",
+                "EventDate": "",
+                "SettleDate": "",
+                "ActualSettleDate": "",
+                "Quantity": "",
+                "Price": "",
+                "PriceDenomination": "CALC",
+                "CounterInvestment": "USD",
+                "NetInvestmentAmount": "CALC",
+                "NetCounterAmount": "CALC",
+                "tradeFX": "",
+                "ContractFxRateNumerator": "",
+                "ContractFxRateDenominator": "",
+                "ContractFxRate": "",
+                "NotionalAmount": "",
+                "FundStructure": "CALC",
+                "SpotDate": "",
+                "PriceDirectly": "",
+                "CounterFXDenomination": "USD",
+                "CounterTDateFx": "",
+                "AccruedInterest": "",
+                "InvestmentAccruedInterest": "",
+                "Comments": "",
+                "TradeExpenses.ExpenseNumber": "",
+                "TradeExpenses.ExpenseCode": "",
+                "TradeExpenses.ExpenseAmt": "",
+                "TradeExpenses.ExpenseNumber1": "",
+                "TradeExpenses.ExpenseCode1": "",
+                "TradeExpenses.ExpenseAmt1": "",
+                "TradeExpenses.ExpenseNumber2": "",
+                "TradeExpenses.ExpenseCode2": "",
+                "TradeExpenses.ExpenseAmt2": "",
+                "NonCapExpenses.NonCapNumber": "1",
+                "NonCapExpenses.NonCapExpenseCode": "BrokerageFeeExpense",
+                "NonCapExpenses.NonCapAmount": "",
+                "NonCapExpenses.NonCapCurrency": "USD",
+                "NonCapExpenses.LocationAccount": "AISFSP30-GTN-ASI488267075",
+                "NonCapExpenses.NonCapLiabilityCode": "BrokerageFeesPayable",
+                "NonCapExpenses.NonCapPaymentType": "SettleDate",
+                "NonCapExpenses.NonCapNumber1": "",
+                "NonCapExpenses.NonCapExpenseCode1": "",
+                "NonCapExpenses.NonCapAmount1": "",
+                "NonCapExpenses.NonCapCurrency1": "",
+                "NonCapExpenses.LocationAccount1": "",
+                "NonCapExpenses.NonCapLiabilityCode1": "",
+                "NonCapExpenses.NonCapPaymentType1": "",
+                "NonCapExpenses.NonCapNumber2": "",
+                "NonCapExpenses.NonCapExpenseCode2": "",
+                "NonCapExpenses.NonCapAmount2": "",
+                "NonCapExpenses.NonCapCurrency2": "",
+                "NonCapExpenses.LocationAccount2": "",
+                "NonCapExpenses.NonCapLiabilityCode2": "",
+                "NonCapExpenses.NonCapPaymentType2": ""
+            }
+        
+        # Default GTN SP 30 Call Option
+        if dataset_name == "gtn_sp_30_call_option":
+            return {
+                "A": "January",
+                "B": "February",
+                "C": "March",
+                "D": "April",
+                "E": "May",
+                "F": "June",
+                "G": "July",
+                "H": "August",
+                "I": "September",
+                "J": "October",
+                "K": "November",
+                "L": "December"
+            }
+        
+        # Default GTN SP 30 Put Option
+        if dataset_name == "gtn_sp_30_put_option":
+            return {
+                "M": "January",
+                "N": "February",
+                "O": "March",
+                "P": "April",
+                "Q": "May",
+                "R": "June",
+                "S": "July",
+                "T": "August",
+                "U": "September",
+                "V": "October",
+                "W": "November",
+                "X": "December"
+            }
         
         return {}
 
@@ -2450,7 +2735,7 @@ class DataConfigPage(tk.Frame):
                     # Add datasets from consolidated file
                 for dataset_name in ["fund_filename_map", "asio_recon_portfolio_mapping", "asio_recon_format_1_headers", "asio_recon_format_2_headers", 
                                     "asio_recon_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_pricing_fno", "asio_pricing_mcx", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config", "mcx_group2_filters", "fno_group2_filters"]:
+                                    "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "geneva_custodian_mapping", "fno_tm_code_with_tm_name", "mcx_tm_code_with_tm_name", "asio_pricing_fno", "asio_pricing_mcx", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config", "mcx_group2_filters", "fno_group2_filters", "GTN_LOADER", "gtn_sp_30_call_option", "gtn_sp_30_put_option"]:
                         if dataset_name in consolidated_data:
                             datasets[dataset_name] = consolidated_path
             
@@ -2470,7 +2755,7 @@ class DataConfigPage(tk.Frame):
         # Always include these datasets (loaded from consolidated_data.json or defaults)
         for dataset_name in ["fund_filename_map", "asio_recon_portfolio_mapping", "asio_recon_format_1_headers", "asio_recon_format_2_headers", 
                             "asio_recon_bhavcopy_headers", "asio_geneva_headers", "trade_headers", 
-                            "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "asio_sf_2_mcx_future_security", "geneva_custodian_mapping", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config", "mcx_group2_filters", "fno_group2_filters"]:
+                            "aafspl_car_future", "option_security", "car_trade_loader", "asio_sf_2_trade_loader", "asio_sf_2_option_security", "asio_sf_2_future_security", "asio_sf_2_mcx_trade_loader", "asio_sf_2_mcx_option_security", "asio_sf_2_mcx_future_security", "geneva_custodian_mapping", "asio_sf4_ft", "asio_sf4_trading_code_mapping", "asio_sub_fund4_read_config", "mcx_group2_filters", "fno_group2_filters", "GTN_LOADER", "gtn_sp_30_call_option", "gtn_sp_30_put_option"]:
             if dataset_name not in datasets:
                 datasets[dataset_name] = consolidated_path  # All come from consolidated file
         
