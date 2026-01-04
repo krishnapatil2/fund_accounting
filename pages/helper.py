@@ -89,6 +89,57 @@ def multiple_excels_to_zip(excel_files, zip_filename="Output.zip"):
     zip_buffer.seek(0)
     return zip_buffer
 
+def output_save_in_template_csv(data, headers, filename="Report.csv"):
+    """
+    Create a CSV file in memory with proper formatting for financial data.
+    
+    Args:
+        data (list[dict]): List of row dicts
+        headers (list[str]): Header column names
+        filename (str): Desired filename inside the zip (default "Report.csv")
+    
+    Returns:
+        (BytesIO, str): CSV file content in memory and its filename
+    """
+    from decimal import Decimal
+    import pandas as pd
+    
+    # Convert data to DataFrame
+    df = pd.DataFrame(data, columns=headers)
+    
+    # Convert Decimal objects to strings for CSV export
+    for col in df.columns:
+        if df[col].dtype == 'object' and len(df) > 0:
+            non_null_vals = df[col].dropna()
+            if not non_null_vals.empty and isinstance(non_null_vals.iloc[0], Decimal):
+                df[col] = df[col].apply(lambda x: str(x) if pd.notna(x) else '')
+    
+    # Save to memory as CSV
+    output = io.BytesIO()
+    df.to_csv(output, index=False, encoding='utf-8-sig')
+    output.seek(0)
+    return output, filename
+
+def multiple_files_to_zip(files, zip_filename="Output.zip"):
+    """
+    Create a ZIP archive from multiple files (Excel or CSV, all in memory) with optimized compression.
+    
+    Args:
+        files (list of tuples): [(file_io, filename), ...]
+            - file_io: BytesIO containing file content
+            - filename: Name for the file inside the zip
+    
+    Returns:
+        BytesIO: In-memory ZIP archive
+    """
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED, compresslevel=1) as zf:
+        for file_io, filename in files:
+            file_io.seek(0)
+            zf.writestr(filename, file_io.read())
+    zip_buffer.seek(0)
+    return zip_buffer
+
 
 def read_file(
     file_path: str,
