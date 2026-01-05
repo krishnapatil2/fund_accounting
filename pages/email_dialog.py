@@ -3,6 +3,7 @@ from tkinter import messagebox
 import tempfile
 import zipfile
 import os
+import sys
 from .outlook_email import send_outlook_email
 
 
@@ -30,6 +31,9 @@ class EmailDialog(tk.Toplevel):
         self.resizable(True, True)
         self.minsize(500, 450)
         
+        # Load icon
+        self._load_icon()
+        
         # Center the dialog on screen
         self.update_idletasks()
         x = (self.winfo_screenwidth() // 2) - (self.winfo_width() // 2)
@@ -42,7 +46,7 @@ class EmailDialog(tk.Toplevel):
         
         # Default values
         self.default_subject = "Daily_Trade_File"
-        self.default_email = "recipient@example.com"  # Change this to your default email
+        self.default_email = "shreyash.jhanwar@dovetailindia.com"  # Change this to your default email
         
         # Store checkboxes for file selection (initialize before _create_widgets)
         self.file_vars = {}
@@ -88,7 +92,8 @@ class EmailDialog(tk.Toplevel):
         subject_entry = tk.Entry(subject_frame, textvariable=self.subject_var, width=40, font=("Arial", 9))
         subject_entry.pack(side="left", padx=5)
         
-        # Email field
+        # Email field - supports multiple emails (comma or semicolon separated)
+        # Users can copy-paste multiple email addresses in this field
         email_frame = tk.Frame(self, bg="#ecf0f1")
         email_frame.pack(fill="x", padx=15, pady=4)
         tk.Label(
@@ -103,6 +108,18 @@ class EmailDialog(tk.Toplevel):
         self.email_var = tk.StringVar(value=self.default_email)
         email_entry = tk.Entry(email_frame, textvariable=self.email_var, width=40, font=("Arial", 9))
         email_entry.pack(side="left", padx=5)
+        
+        # Helper label for multiple emails (small text below the entry)
+        email_help_frame = tk.Frame(self, bg="#ecf0f1")
+        email_help_frame.pack(fill="x", padx=15, pady=(0, 4))
+        tk.Label(
+            email_help_frame,
+            text="Note: Multiple emails can be pasted here (comma or semicolon separated)",
+            font=("Arial", 8),
+            bg="#ecf0f1",
+            fg="#7f8c8d",
+            anchor="w"
+        ).pack(side="left", padx=(85, 0))  # Align with email entry field
         
         # Body field - compact
         body_frame = tk.Frame(self, bg="#ecf0f1")
@@ -436,25 +453,115 @@ class EmailDialog(tk.Toplevel):
             messagebox.showerror("Error", f"Failed to extract files from ZIP: {str(e)}")
             return []
     
+    def _parse_emails(self, email_text):
+        """
+        Parse email addresses from text input.
+        Supports multiple formats:
+        - One email per line
+        - Comma-separated emails
+        - Semicolon-separated emails
+        - Mixed formats
+        
+        Args:
+            email_text (str): Raw email input text
+            
+        Returns:
+            list: List of valid email addresses (stripped and cleaned)
+        """
+        if not email_text:
+            return []
+        
+        # Replace semicolons with commas for consistent parsing
+        email_text = email_text.replace(";", ",")
+        
+        # Split by both commas and newlines
+        emails = []
+        for line in email_text.split("\n"):
+            for email in line.split(","):
+                email = email.strip()
+                if email:  # Only add non-empty emails
+                    emails.append(email)
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_emails = []
+        for email in emails:
+            if email not in seen:
+                seen.add(email)
+                unique_emails.append(email)
+        
+        return unique_emails
+    
+    def _validate_email(self, email):
+        """
+        Basic email validation.
+        
+        Args:
+            email (str): Email address to validate
+            
+        Returns:
+            bool: True if email appears valid, False otherwise
+        """
+        if not email or not email.strip():
+            return False
+        
+        email = email.strip()
+        
+        # Basic validation: must contain @ and have a domain with at least one dot
+        if "@" not in email:
+            return False
+        
+        parts = email.split("@")
+        if len(parts) != 2:
+            return False
+        
+        local, domain = parts
+        if not local or not domain:
+            return False
+        
+        # Domain must contain at least one dot
+        if "." not in domain:
+            return False
+        
+        return True
+    
     def _on_send(self):
         """Handle send mail button click."""
         # Get subject and email
         subject = self.subject_var.get().strip()
-        email = self.email_var.get().strip()
+        email_text = self.email_var.get().strip()
         
         # Validate inputs
         if not subject:
             messagebox.showwarning("Validation Error", "Please enter a subject.")
             return
         
-        if not email:
-            messagebox.showwarning("Validation Error", "Please enter an email address.")
+        if not email_text:
+            messagebox.showwarning("Validation Error", "Please enter at least one email address.")
             return
         
-        # Basic email validation
-        if "@" not in email or "." not in email.split("@")[-1]:
-            messagebox.showwarning("Validation Error", "Please enter a valid email address.")
+        # Parse multiple emails
+        email_list = self._parse_emails(email_text)
+        
+        if not email_list:
+            messagebox.showwarning("Validation Error", "Please enter at least one valid email address.")
             return
+        
+        # Validate all emails
+        invalid_emails = []
+        for email in email_list:
+            if not self._validate_email(email):
+                invalid_emails.append(email)
+        
+        if invalid_emails:
+            messagebox.showwarning(
+                "Validation Error", 
+                f"Please enter valid email addresses.\n\nInvalid emails:\n" + "\n".join(invalid_emails)
+            )
+            return
+        
+        # Join emails with semicolon for Outlook (Outlook uses semicolon as separator)
+        email = "; ".join(email_list)
         
         # Get selected files
         selected_files = [filename for filename, var in self.file_vars.items() if var.get()]
@@ -543,6 +650,39 @@ class EmailDialog(tk.Toplevel):
         except Exception as e:
             self._cleanup_temp_dir()
             messagebox.showerror("Error", f"Failed to send email: {str(e)}")
+    
+    def _get_icon_path(self):
+        """Get the icon path for the email dialog - works for both development and compiled EXE"""
+        if getattr(sys, 'frozen', False):
+            # Running as compiled EXE
+            return os.path.join(sys._MEIPASS, "outlook.png")
+        else:
+            # Running as script - try multiple possible locations
+            possible_paths = [
+                "outlook.png",  # Same directory (root)
+                "../outlook.png",  # Parent directory
+                os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "outlook.png")  # Root directory
+            ]
+            for path in possible_paths:
+                if os.path.exists(path):
+                    return os.path.abspath(path)
+            return None
+    
+    def _load_icon(self):
+        """Load outlook.png icon for the dialog"""
+        try:
+            icon_path = self._get_icon_path()
+            if icon_path and os.path.exists(icon_path):
+                # Use iconphoto for PNG files (works better than iconbitmap)
+                try:
+                    from PIL import Image, ImageTk
+                    icon_image = Image.open(icon_path)
+                    icon_photo = ImageTk.PhotoImage(icon_image)
+                    self.iconphoto(False, icon_photo)
+                except Exception:
+                    pass
+        except Exception:
+            pass
     
     def destroy(self):
         """Override destroy to clean up temporary directory."""
