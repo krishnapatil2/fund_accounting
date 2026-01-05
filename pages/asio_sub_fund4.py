@@ -1,10 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
-from tkcalendar import DateEntry
 from datetime import datetime
 import os
 import json
-import pandas as pd
 from collections import defaultdict
 import threading
 import csv
@@ -15,16 +13,10 @@ import tempfile
 import shutil
 
 from my_app.pages.loading import LoadingSpinner
-from my_app.pages.helper import output_save_in_template, multiple_excels_to_zip, is_missing
 
-from my_app.CONSTANTS import (
-    RECORDTYPE, TradeQuantity, sub_fund_4_headers, keep_blank_for_headers,
-    RECORDACTION, USERTRANID1, PORTFOLIO, STRATEGY, PRICEDENOMINATION,
-    COUNTERINVESTMENT, NETINVESTMENTAMOUNT, NETCOUNTERAMOUNT, FUNDSTRUCTURE,
-    PRICEDIRECTLY, COUNTERFXDENOMINATION, QUANTITY, PRICE, EVENTDATE, SETTLEDATE, ACTUALSETTLEDATE
-)
-from CONSTANTS import BROKER, KEYVALUE, KEYVALUE_KEYNAME, LOCATIONACCOUNT, BuySellIndicator, TradingCode
-from CONSTANTS import INVESTMENT
+# LAZY IMPORTS - Heavy libraries imported only when needed (in methods)
+# This speeds up frame opening significantly
+# pandas, CONSTANTS, helper functions, and DateEntry will be imported when actually needed
 
 class ASIOSubFund4Page(tk.Frame):
     def __init__(self, parent):
@@ -694,6 +686,9 @@ class ASIOSubFund4Page(tk.Frame):
     def _create_date_entries_async(self):
         """Create DateEntry widgets asynchronously after frame is shown - this avoids blocking initialization."""
         try:
+            # Lazy import DateEntry (tkcalendar is slow to import)
+            from tkcalendar import DateEntry
+            
             # Event Date
             self.event_date_entry = DateEntry(
                 self._event_date_frame,
@@ -939,6 +934,7 @@ class ASIOSubFund4Page(tk.Frame):
         Returns:
             pd.DataFrame: DataFrame with headers from specified row and column
         """
+        # Lazy import pandas (heavy library)
         from pathlib import Path
         import pandas as pd
         
@@ -1035,6 +1031,9 @@ class ASIOSubFund4Page(tk.Frame):
         return f"{base_location}_{trading_code_key}"
     
     def concatenate_security_name(self, row):
+        # Lazy import pandas (heavy library)
+        import pandas as pd
+        
         try:
             symbol = row["Symbol"]
         except Exception as e:
@@ -1111,6 +1110,16 @@ class ASIOSubFund4Page(tk.Frame):
         Returns:
             list: Prepared row data in sub_fund_4_headers order
         """
+        # Lazy import CONSTANTS (heavy import)
+        from my_app.CONSTANTS import (
+            RECORDTYPE, TradeQuantity, sub_fund_4_headers, keep_blank_for_headers,
+            RECORDACTION, USERTRANID1, PORTFOLIO, STRATEGY, PRICEDENOMINATION,
+            COUNTERINVESTMENT, NETINVESTMENTAMOUNT, NETCOUNTERAMOUNT, FUNDSTRUCTURE,
+            PRICEDIRECTLY, COUNTERFXDENOMINATION, QUANTITY, PRICE, EVENTDATE, SETTLEDATE, ACTUALSETTLEDATE
+        )
+        from CONSTANTS import BROKER, KEYVALUE, KEYVALUE_KEYNAME, LOCATIONACCOUNT, BuySellIndicator, TradingCode
+        from CONSTANTS import INVESTMENT
+        
         prepared_row = []
         try:
             security_name = self.concatenate_security_name(row)
@@ -1263,6 +1272,9 @@ class ASIOSubFund4Page(tk.Frame):
     
     def _submit(self):
         """Handle form submission."""
+        # Lazy import CONSTANTS (heavy import) - only import TradingCode needed here
+        from CONSTANTS import TradingCode
+        
         # Validate files
         if not self.selected_files:
             messagebox.showwarning("Warning", "Please select at least one file to process.")
@@ -1599,6 +1611,10 @@ class ASIOSubFund4Page(tk.Frame):
         Returns:
             list: List of tuples (file_io, filename) for all output files created
         """
+        # Lazy import helper and CONSTANTS (heavy imports)
+        from my_app.pages.helper import output_save_in_template
+        from my_app.CONSTANTS import sub_fund_4_headers
+        
         output_files = []
         
         # Get zip base name without extension for naming
@@ -1717,6 +1733,10 @@ class ASIOSubFund4Page(tk.Frame):
     
     def _export_to_template(self):
         """Export data to template format (ZIP with Excel files separated by trading code)."""
+        # Lazy import helper and CONSTANTS (heavy imports)
+        from my_app.pages.helper import output_save_in_template
+        from my_app.CONSTANTS import sub_fund_4_headers
+        
         if not hasattr(self, 'loader_data') or not self.loader_data:
             messagebox.showinfo("Nothing to export", "Process files first to generate template data.")
             return
