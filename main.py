@@ -138,6 +138,9 @@ class MainApp(tk.Tk):
         # Load icon and data file in background (non-blocking)
         self.after(100, self._load_resources)
         
+        # Reload dataconfig data on startup (non-blocking)
+        self.after(150, self._reload_dataconfig_on_startup)
+        
         # Show dashboard immediately (lazy loaded)
         self.after(50, lambda: self.show_page("dashboard"))
     
@@ -255,6 +258,30 @@ class MainApp(tk.Tk):
         try:
             ensure_consolidated_data_file()
         except:
+            pass
+    
+    def _reload_dataconfig_on_startup(self):
+        """Reload dataconfig page data on startup to ensure required datasets are created"""
+        try:
+            # Import and initialize dataconfig to ensure all datasets are created
+            # This ensures ASIO Sub Fund 2 FNO datasets exist on startup
+            from pages import dataconfig
+            import tkinter as tk
+            
+            # Create a hidden parent frame for temporary dataconfig instance
+            dummy_parent = tk.Frame(self)
+            dummy_parent.pack_forget()  # Hide immediately
+            
+            # Create temporary dataconfig instance - this will:
+            # 1. Call load_saved_data_on_startup() which creates missing datasets
+            # 2. Ensure all required datasets for ASIO Sub Fund 2 FNO exist
+            temp_dataconfig = dataconfig.DataConfigPage(dummy_parent)
+            
+            # Clean up
+            dummy_parent.destroy()
+        except Exception as e:
+            # Silently fail - dataconfig will reload when user opens it
+            # The ensure_consolidated_data_file() already handles file creation
             pass
 
     def _get_icon_path(self):
