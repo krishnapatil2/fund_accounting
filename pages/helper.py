@@ -227,3 +227,33 @@ def is_missing(value):
             return True
 
     return False
+
+def convert_dates_for_csv(data_list, date_fields=None):
+    """
+    Convert dates from MM-DD-YYYY to DD-MM-YYYY format for CSV export.
+    
+    Args:
+        data_list: List of dictionaries containing date fields
+        date_fields: List of field names to convert (default: EventDate, SettleDate, ActualSettleDate)
+    
+    Returns:
+        List of dictionaries with converted dates
+    """
+    if date_fields is None:
+        date_fields = ["EventDate", "SettleDate", "ActualSettleDate"]
+    
+    converted_data = []
+    for record in data_list:
+        new_record = record.copy()
+        for field in date_fields:
+            if field in new_record and new_record[field]:
+                try:
+                    # Parse MM-DD-YYYY format
+                    dt = datetime.strptime(str(new_record[field]), "%m-%d-%Y")
+                    # Convert to DD-MM-YYYY format
+                    new_record[field] = dt.strftime("%d-%m-%Y")
+                except (ValueError, TypeError):
+                    # If parsing fails, keep original value
+                    pass
+        converted_data.append(new_record)
+    return converted_data
