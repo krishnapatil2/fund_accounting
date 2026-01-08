@@ -461,9 +461,12 @@ class FOReconciliationPage(tk.Frame):
                 )
                 
             except Exception as e:
-                raise e
                 loader.close()
-                messagebox.showerror("Export Error", f"Export failed:\n{str(e)}")
+                error_msg = str(e)
+                # Extract file/sheet name from error if available
+                if "columns passed" in error_msg.lower() or "data had" in error_msg.lower():
+                    error_msg = f"Column mismatch error during Excel export:\n\n{error_msg}\n\nPlease check the data structure and ensure all columns match the expected headers."
+                messagebox.showerror("Export Error", f"Export failed:\n\n{error_msg}")
                 self.status_var.set("Export failed")
         
         # Run the task in a background thread
@@ -868,22 +871,59 @@ class FOReconciliationPage(tk.Frame):
                 # Fallback: create generic headers
                 geneva_headers = [f"Column_{i+1}" for i in range(num_columns)]
             
-            df = pd.DataFrame(data_dict["GENEVA_HOLDINGS"], columns=geneva_headers)
-            sheets_to_create.append(("GENEVA_HOLDINGS", df))
+            try:
+                df = pd.DataFrame(data_dict["GENEVA_HOLDINGS"], columns=geneva_headers)
+                sheets_to_create.append(("GENEVA_HOLDINGS", df))
+            except ValueError as e:
+                actual_cols = len(first_row) if data_dict["GENEVA_HOLDINGS"] else 0
+                expected_cols = len(geneva_headers)
+                error_msg = (
+                    f"Column mismatch in sheet 'GENEVA_HOLDINGS':\n\n"
+                    f"Expected columns: {expected_cols}\n"
+                    f"Actual data columns: {actual_cols}\n\n"
+                    f"Please verify that the Geneva Holdings file has the correct number of columns.\n"
+                    f"Error details: {str(e)}"
+                )
+                raise ValueError(error_msg) from e
         
         # Process other sheets
         for key, headers in sheet_configs:
             if data_dict[key]:
                 print(f"Preparing sheet: {key}")
                 print(f"data: {len(data_dict[key][0])} {len(headers)}")
-                df = pd.DataFrame(data_dict[key], columns=headers)
-                sheets_to_create.append((key, df))
+                try:
+                    df = pd.DataFrame(data_dict[key], columns=headers)
+                    sheets_to_create.append((key, df))
+                except ValueError as e:
+                    # Get actual column count from data
+                    actual_cols = len(data_dict[key][0]) if data_dict[key] else 0
+                    expected_cols = len(headers)
+                    error_msg = (
+                        f"Column mismatch in sheet '{key}':\n\n"
+                        f"Expected columns: {expected_cols}\n"
+                        f"Actual data columns: {actual_cols}\n\n"
+                        f"Please verify that the data file for '{key}' has the correct number of columns.\n"
+                        f"Error details: {str(e)}"
+                    )
+                    raise ValueError(error_msg) from e
 
         # Add Master File sheet last
         master_file_data = self._create_master_file_data()
         if master_file_data:
-            master_df = pd.DataFrame(master_file_data[1:], columns=master_file_data[0])
-            sheets_to_create.append(("MASTER_FILE", master_df))
+            try:
+                master_df = pd.DataFrame(master_file_data[1:], columns=master_file_data[0])
+                sheets_to_create.append(("MASTER_FILE", master_df))
+            except ValueError as e:
+                expected_cols = len(master_file_data[0]) if master_file_data else 0
+                actual_cols = len(master_file_data[1]) if len(master_file_data) > 1 else 0
+                error_msg = (
+                    f"Column mismatch in sheet 'MASTER_FILE':\n\n"
+                    f"Expected columns (from headers): {expected_cols}\n"
+                    f"Actual data columns: {actual_cols}\n\n"
+                    f"Please verify that the master file data structure is correct.\n"
+                    f"Error details: {str(e)}"
+                )
+                raise ValueError(error_msg) from e
         
         # Fallback: create summary sheet if no data
         if not sheets_to_create:
