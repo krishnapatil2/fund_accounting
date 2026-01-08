@@ -43,7 +43,6 @@ def send_outlook_email(recipient, subject, body, attachment_paths=None):
         # Try to send email directly, but fallback to Display if security blocks it
         try:
             mail.Send()
-            print("Email sent successfully.")
             return True
         except Exception as send_error:
             # Check if this is the "Operation aborted" error (Outlook security blocking)
