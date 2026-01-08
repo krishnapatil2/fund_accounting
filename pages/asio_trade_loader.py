@@ -768,6 +768,7 @@ class ASIOTradeLoaderPage(tk.Frame):
         def task():
             try:
                 files = []
+                from .helper import convert_dates_for_csv
                 
                 # Helper function to create files
                 def create_files(format_type, ext, func):
@@ -775,24 +776,28 @@ class ASIOTradeLoaderPage(tk.Frame):
                     # Create files for each TM code
                     for tm_code, data_list in self.data_by_tm_code.items():
                         if data_list:
+                            # Convert dates for CSV format
+                            processed_data = convert_dates_for_csv(data_list) if format_type == "CSV" else data_list
                             file_io, file_name = func(
-                                data_list, TM_NAME_HEADERS,
+                                processed_data, TM_NAME_HEADERS,
                                 f"TM_{tm_code}_template{ext}"
                             )
                             file_list.append((file_io, file_name))
                     
                     # Create option security file
                     if hasattr(self, 'asio_sub_fund_2_option') and self.asio_sub_fund_2_option:
+                        processed_data = self.asio_sub_fund_2_option
                         file_io, file_name = func(
-                            self.asio_sub_fund_2_option, ASIO_SUB_FUND_2_OPTION_SECURITY_HEADER,
+                            processed_data, ASIO_SUB_FUND_2_OPTION_SECURITY_HEADER,
                             f"ASIO_Sub_Fund_2_Option_Security{ext}"
                         )
                         file_list.append((file_io, file_name))
                     
                     # Create future security file
                     if hasattr(self, 'asio_sub_fund_2_future') and self.asio_sub_fund_2_future:
+                        processed_data = self.asio_sub_fund_2_future
                         file_io, file_name = func(
-                            self.asio_sub_fund_2_future, ASIO_SUB_FUND_2_OPTION_SECURITY_HEADER,
+                            processed_data, ASIO_SUB_FUND_2_OPTION_SECURITY_HEADER,
                             f"ASIO_Sub_Fund_2_Future_Security{ext}"
                         )
                         file_list.append((file_io, file_name))
