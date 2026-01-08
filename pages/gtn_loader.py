@@ -294,61 +294,85 @@ class GTNLoaderPage(tk.Frame):
 
                     return date.strftime("%m-%d-%Y")
                 
+                row_errors = []  # Track errors per row
                 for index, row in df_data.iterrows():
-                    # Get fee amounts, defaulting to 0 if missing
-                    B2B_COMM = float(row.get("B2B_COMM", 0) or 0)
-                    BROKER_COMM = float(row.get("BROKER_COMM", 0) or 0)
-                    OTHER_FEE_AMOUNT = float(row.get("OTHER_FEE_AMOUNT", 0) or 0)
-                    VAT_AMOUNT = float(row.get("VAT_AMOUNT", 0) or 0)
-                    WHT_AMOUNT = float(row.get("WHT_AMOUNT", 0) or 0)
+                    try:
+                        # Get fee amounts, defaulting to 0 if missing
+                        B2B_COMM = float(row.get("B2B_COMM", 0) or 0)
+                        BROKER_COMM = float(row.get("BROKER_COMM", 0) or 0)
+                        OTHER_FEE_AMOUNT = float(row.get("OTHER_FEE_AMOUNT", 0) or 0)
+                        VAT_AMOUNT = float(row.get("VAT_AMOUNT", 0) or 0)
+                        WHT_AMOUNT = float(row.get("WHT_AMOUNT", 0) or 0)
 
-                    # Calculate non-cap expenses sum
-                    noncap_sum = B2B_COMM + BROKER_COMM + OTHER_FEE_AMOUNT + VAT_AMOUNT + WHT_AMOUNT
+                        # Calculate non-cap expenses sum
+                        noncap_sum = B2B_COMM + BROKER_COMM + OTHER_FEE_AMOUNT + VAT_AMOUNT + WHT_AMOUNT
 
-                    # Start with GTN loader config template
-                    row_data = gtn_loader_config.copy()
+                        # Start with GTN loader config template
+                        row_data = gtn_loader_config.copy()
 
-                    # Parse ISIN code
-                    isin_code = row.get("ISINCODE", "")
-                    parsed_isin = self.parse_foreign_isin(isin_code, gtn_sp_30_call_option, gtn_sp_30_put_option)
+                        # Parse ISIN code
+                        isin_code = row.get("ISINCODE", "")
+                        parsed_isin = self.parse_foreign_isin(isin_code, gtn_sp_30_call_option, gtn_sp_30_put_option)
+                        
+                        ##############################################################
+                        # Determine if this is an option trade
+                        # Check if parsed ISIN contains 'C' or 'P' (option type indicator)
+                        # Format: {symbol} {YY}{MM}{DD}{C|P}000{strike}
+                        # So we check if 'C' or 'P' appears in the parsed ISIN
+                        # is_option = bool(parsed_isin and ('C' in parsed_isin or 'P' in parsed_isin))
+                        # Get UNIT value and apply option logic
+                        # unit_value = row.get("UNIT", "")
+                        # if is_option and unit_value:
+                        #     try:
+                        #         # For option trades, multiply UNIT by 100
+                        #         unit_float = float(unit_value)
+                        #         quantity_value = str(int(unit_float * 100))
+                        #     except (ValueError, TypeError):
+                        #         # If conversion fails, use original value
+                        #         quantity_value = str(unit_value)
+                        # else:
+                        #     # For non-option trades, use UNIT as is
+                        #     quantity_value = str(unit_value)
+                        ######################################################
+
+                        trade_date = format_date(row.get("TRADE_DATE"))
                     
-                    ##############################################################
-                    # Determine if this is an option trade
-                    # Check if parsed ISIN contains 'C' or 'P' (option type indicator)
-                    # Format: {symbol} {YY}{MM}{DD}{C|P}000{strike}
-                    # So we check if 'C' or 'P' appears in the parsed ISIN
-                    # is_option = bool(parsed_isin and ('C' in parsed_isin or 'P' in parsed_isin))
-                    # Get UNIT value and apply option logic
-                    # unit_value = row.get("UNIT", "")
-                    # if is_option and unit_value:
-                    #     try:
-                    #         # For option trades, multiply UNIT by 100
-                    #         unit_float = float(unit_value)
-                    #         quantity_value = str(int(unit_float * 100))
-                    #     except (ValueError, TypeError):
-                    #         # If conversion fails, use original value
-                    #         quantity_value = str(unit_value)
-                    # else:
-                    #     # For non-option trades, use UNIT as is
-                    #     quantity_value = str(unit_value)
-                    ######################################################
+                        # Update row data with values from file
+                        row_data.update({
+                            "RecordType": str(get_side(row.get("SIDE", ""))),
+                            "KeyValue": parsed_isin,
+                            "Investment": parsed_isin,
+                            "EventDate": trade_date,
+                            "SettleDate": trade_date,
+                            "ActualSettleDate": trade_date,
+                            "Quantity": str(row.get("UNIT", "")),
+                            "Price": str(row.get("PRICE", "")),
+                            "NonCapExpenses.NonCapAmount": str(noncap_sum),
+                        })
 
-                    trade_date = format_date(row.get("TRADE_DATE"))
+                        processed_rows.append(row_data)
+                    except Exception as row_error:
+                        # Track error for this row (Excel row number = index + 2, since index is 0-based and we skip header)
+                        excel_row_num = int(index) + 2
+                        side_value = row.get("SIDE", "")
+                        error_msg = f"Row {excel_row_num} (SIDE='{side_value}'): {str(row_error)}"
+                        row_errors.append(error_msg)
+                        # Continue processing other rows
+                        continue
                 
-                    # Update row data with values from file
-                    row_data.update({
-                        "RecordType": str(get_side(row.get("SIDE", ""))),
-                        "KeyValue": parsed_isin,
-                        "Investment": parsed_isin,
-                        "EventDate": trade_date,
-                        "SettleDate": trade_date,
-                        "ActualSettleDate": trade_date,
-                        "Quantity": str(row.get("UNIT", "")),
-                        "Price": str(row.get("PRICE", "")),
-                        "NonCapExpenses.NonCapAmount": str(noncap_sum),
-                    })
-
-                    processed_rows.append(row_data)
+                # Show user-friendly error message if any row errors occurred
+                if row_errors:
+                    error_count = len(row_errors)
+                    error_details = "\n".join(row_errors[:10])  # Show first 10 errors
+                    if error_count > 10:
+                        error_details += f"\n... and {error_count - 10} more error(s)"
+                    
+                    messagebox.showerror(
+                        "Processing Errors",
+                        f"Found {error_count} error(s) while processing {os.path.basename(file_path)}:\n\n"
+                        f"{error_details}\n\n"
+                        f"Valid rows were processed successfully."
+                    )
                 
                 # Store processed data for this file (after processing all rows)
                 self.processed_files_data[file_path] = {
