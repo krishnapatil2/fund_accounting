@@ -261,9 +261,6 @@ class ExcelMergerPage(tk.Frame):
         file_path = filedialog.askopenfilename(
             title="Select Excel File to Extract Sheets From (XLS, XLSX formats)",
             filetypes=[
-                ["Excel Files (XLSX)", "*.xlsx"],
-                ["Excel Files (XLS)", "*.xls"],
-                ["All Excel Files", "*.xlsx *.xls"],
                 ["All Files", "*.*"]
             ]
         )
@@ -285,6 +282,10 @@ class ExcelMergerPage(tk.Frame):
             if not selected_sheets:
                 return
 
+            # Sort selected sheets by their original index order to maintain index order
+            sheet_index_map = {name: idx for idx, name in enumerate(sheet_names)}
+            selected_sheets = sorted(selected_sheets, key=lambda x: sheet_index_map.get(x, 999))
+
             # Add selected sheets to the list
             self._add_extracted_sheets(file_path, selected_sheets)
 
@@ -295,16 +296,16 @@ class ExcelMergerPage(tk.Frame):
         """Show dialog to select which sheets to extract"""
         dialog = tk.Toplevel(self)
         dialog.title("Select Sheets to Extract")
-        dialog.geometry("500x400")
+        dialog.geometry("650x550")
         dialog.configure(bg="#ecf0f1")
         dialog.transient(self)
         dialog.grab_set()
 
         # Center the dialog
         dialog.update_idletasks()
-        x = (dialog.winfo_screenwidth() // 2) - (500 // 2)
-        y = (dialog.winfo_screenheight() // 2) - (400 // 2)
-        dialog.geometry(f"500x400+{x}+{y}")
+        x = (dialog.winfo_screenwidth() // 2) - (650 // 2)
+        y = (dialog.winfo_screenheight() // 2) - (550 // 2)
+        dialog.geometry(f"650x550+{x}+{y}")
 
         # Title
         title = tk.Label(dialog, text=f"Select Sheets from: {os.path.basename(file_path)}", 
@@ -333,13 +334,13 @@ class ExcelMergerPage(tk.Frame):
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
-        # Variables to store checkbox states
-        checkbox_vars = {}
+        # Variables to store checkbox states - maintain order using list
+        checkbox_vars = []
         
-        # Create checkboxes for each sheet
+        # Create checkboxes for each sheet in original index order
         for i, sheet_name in enumerate(sheet_names):
             var = tk.BooleanVar(value=True)  # Default to checked
-            checkbox_vars[sheet_name] = var
+            checkbox_vars.append((sheet_name, var))  # Store as tuple to maintain order
             
             cb = tk.Checkbutton(scrollable_frame, text=sheet_name, variable=var, 
                                bg="#ecf0f1", fg="#2c3e50", font=("Arial", 10))
@@ -355,16 +356,17 @@ class ExcelMergerPage(tk.Frame):
         result = []
 
         def select_all():
-            for var in checkbox_vars.values():
+            for _, var in checkbox_vars:
                 var.set(True)
 
         def select_none():
-            for var in checkbox_vars.values():
+            for _, var in checkbox_vars:
                 var.set(False)
 
         def ok_clicked():
             nonlocal result
-            result = [sheet_name for sheet_name, var in checkbox_vars.items() if var.get()]
+            # Maintain original index order when collecting selected sheets
+            result = [sheet_name for sheet_name, var in checkbox_vars if var.get()]
             dialog.destroy()
 
         tk.Button(button_frame, text="Select All", command=select_all, 
@@ -572,10 +574,14 @@ class ExcelMergerPage(tk.Frame):
             index_data = []
             first_sheet_replaced = False
             
-            # Process each file in order
-            for order, target_sheet_name, file_path, source_sheet_name in file_data:
+            # Process each file in reverse order to maintain correct index order
+            # (since we insert at position 0, processing in reverse gives us correct final order)
+            for order, target_sheet_name, file_path, source_sheet_name in reversed(file_data):
                 self._merge_single_file_xlwings(app, merged_wb, file_path, target_sheet_name, sheet_names_used, index_data, source_sheet_name, first_sheet_replaced)
                 first_sheet_replaced = True
+            
+            # Reverse index_data to match the correct order (since we processed in reverse)
+            index_data.reverse()
             
             # Create index sheet
             if index_data:
