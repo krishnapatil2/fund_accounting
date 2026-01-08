@@ -15,6 +15,9 @@ BG_COLOR = "#F9F9F9"
 # Change this to: "UAT", "PROD", "DEV", "TEST", etc.
 APP_ENVIRONMENT = "UAT"
 
+# Application Version
+APP_VERSION = "1.0"
+
 # Lazy page loader - pages imported only when accessed
 _page_cache = {}
 
@@ -106,7 +109,7 @@ class MainApp(tk.Tk):
         self.update_idletasks()
         
         # Show UI immediately for faster perceived startup
-        self.title("Fund Accounting App")
+        self.title(f"Fund Accounting App v{APP_VERSION}")
         self.geometry("1050x650")
         self.configure(bg=BG_COLOR)
 
